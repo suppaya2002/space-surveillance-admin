@@ -1,13 +1,32 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
 import prisma from "@/lib/prisma";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const users = await prisma.user.findMany({
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ category: "asc" }, { firstName: "asc" }],
   });
   return NextResponse.json(users);
+}
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json();
+    const { rank, firstName, lastName, category } = body;
+    const email = `${Date.now()}@mil.rtaf`; // dummy unique email สำหรับ schema
+
+    const newUser = await prisma.user.create({
+      data: {
+        email,
+        rank,
+        firstName,
+        lastName,
+        category: category || "NON_COMMISSIONED",
+        status: "ACTIVE",
+        role: "ADMIN",
+      },
+    });
+    return NextResponse.json(newUser);
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
 }
