@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import SessionProvider from "@/components/SessionProvider";
 
 export const metadata: Metadata = {
   title: "ระบบธุรการกองเฝ้าระวังทางอวกาศ",
@@ -12,7 +13,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="th">
-      <body>{children}</body>
+      <body>
+        <SessionProvider>{children}</SessionProvider>
+      </body>
     </html>
   );
 }
