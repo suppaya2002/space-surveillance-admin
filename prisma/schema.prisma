@@ -1,115 +1,42 @@
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 generator client {
   provider = "prisma-client-js"
 }
 
-enum Role {
-  SUPER_ADMIN // แอดมินสูงสุดคนเดียว กำหนดสิทธิ์ Admin ได้
-  ADMIN       // จัดการเวร อนุมัติการลา ลงผลัดราชการ
-  USER        // กำลังพลทั่วไป ขอลาของตัวเองได้เท่านั้น
-}
-
-enum UserStatus {
-  PENDING     // เพิ่งล็อกอินผ่าน Google รอแอดมินกรอกชื่อ-สกุล และอนุมัติ
-  ACTIVE      // ได้รับการอนุมัติแล้ว เข้าใช้งานได้ปกติ
-}
-
-enum OfficerCategory {
-  COMMISSIONED     // นายทหารสัญญาบัตร
-  NON_COMMISSIONED // นายทหารประทวน
-}
-
-enum LeaveType {
-  VACATION // ลาพักผ่อน
-  BUSINESS // ลากิจส่วนตัว
-  SICK     // ลาป่วย
-  OTHER    // อื่นๆ
-}
-
-enum MissionLocation {
-  SAM_MO      // ราชการ สฝอว.สม.
-  DON_MUEANG  // ราชการ สฝอว.ดน.
-  OTHER       // ราชการอื่นๆ
-}
-
 model User {
-  id           String           @id @default(cuid())
-  email        String           @unique
-  name         String?          // ชื่อจาก Google Profile
-  rank         String?          // ยศ (เช่น จ.อ., น.ต.)
-  firstName    String?          // ชื่อจริง
-  lastName     String?          // นามสกุลจริง
-  category     OfficerCategory? // สัญญาบัตร / ประทวน
-  role         Role             @default(USER)
-  status       UserStatus       @default(PENDING)
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-
-  leaves       LeaveRecord[]
-  missionStaff MissionStaff[]
-  dutyStaff    DutyStaff[]
-}
-
-model LeaveRecord {
-  id         String    @id @default(cuid())
-  userId     String
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  leaveType  LeaveType
-  startDate  DateTime
-  endDate    DateTime
-  reason     String?
-  isApproved Boolean   @default(false)
-  createdAt  DateTime  @default(now())
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String?
+  firstName     String?
+  lastName      String?
+  rank          String?
+  role          String         @default("USER")
+  status        String         @default("PENDING")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  missionStaffs MissionStaff[]
 }
 
 model MissionBatch {
-  id          String          @id @default(cuid())
-  batchNumber Int             // ลำดับผลัด เช่น ผลัดที่ 1
-  year        Int             // ปี พ.ศ. เช่น 2569
-  location    MissionLocation // สฝอว.สม. / สฝอว.ดน. / ราชการอื่นๆ
-  otherDetail String?         // รายละเอียดหากเป็นราชการอื่นๆ
+  id          String         @id @default(cuid())
+  name        String
   startDate   DateTime
   endDate     DateTime
-  createdAt   DateTime        @default(now())
+  documentUrl String?
   staffs      MissionStaff[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 }
 
 model MissionStaff {
-  id        String       @id @default(cuid())
-  batchId   String
-  batch     MissionBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model DutyType {
-  id           String           @id @default(cuid())
-  name         String           // เช่น เวรนำแถว, เวรบรรยายสรุป, เวรพูดหน้าแถว
-  requiredType OfficerCategory? // ระบุ สัญญาบัตร / ประทวน หรือ null หากเป็นใครก็ได้
-  mainCount    Int              @default(1) // จำนวนตัวจริง
-  backupCount  Int              @default(1) // จำนวนตัวสำรอง
-  schedules    DutySchedule[]
-}
-
-model DutySchedule {
-  id         String      @id @default(cuid())
-  dutyTypeId String
-  dutyType   DutyType    @relation(fields: [dutyTypeId], references: [id], onDelete: Cascade)
-  dutyDate   DateTime
-  year       Int         // ปี พ.ศ. เก็บสถิติย้อนหลัง
-  createdAt  DateTime    @default(now())
-  staffs     DutyStaff[]
-}
-
-model DutyStaff {
-  id         String       @id @default(cuid())
-  scheduleId String
-  schedule   DutySchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
-  userId     String
-  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  isBackup   Boolean      @default(false) // true = ตัวสำรอง, false = ตัวจริง
+  id             String       @id @default(cuid())
+  missionBatchId String
+  missionBatch   MissionBatch @relation(fields: [missionBatchId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
