@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import prisma from "@/lib/prisma";
 
+// ดึงรายการลาทั้งหมด
 export async function GET() {
+  const session = await auth();
+  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const leaves = await prisma.leaveRecord.findMany({
     include: { user: true },
     orderBy: { startDate: "desc" },
@@ -9,26 +14,30 @@ export async function GET() {
   return NextResponse.json(leaves);
 }
 
+// บันทึกคำขอลา (User ลาได้เฉพาะตัวเอง, Admin เลือกลาให้ใครก็ได้)
 export async function POST(req: Request) {
-  try {
-    const { userId, leaveType, startDate, endDate, reason } = await req.json();
-    if (!userId || !startDate || !endDate) {
-      return NextResponse.json({ error: "ข้อมูลไม่ครบถ้วน" }, { status: 400 });
-    }
+  const session = await auth();
+  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const newLeave = await prisma.leaveRecord.create({
-      data: {
-        userId,
-        leaveType,
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-        reason,
-        isApproved: true, // ไม่ต้องรอ Login อนุมัติ เป็น Active ทันที
-      },
-      include: { user: true },
-    });
-    return NextResponse.json(newLeave);
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  }
+  const currentUser = session.user as any;
+  const isAdmin = currentUser.role === "ADMIN" || currentUser.role === "SUPER_ADMIN";
+
+  const { userId, leaveType, startDate, endDate, reason, isApproved } = await req.json();
+
+  // ป้องกันไม่ให้ User ทั่วไปส่ง userId ของคนอื่น
+  const targetUserId = isAdmin && userId ? userId : currentUser.id;
+
+  const newLeave = await prisma.leaveRecord.create({
+    data: {
+      userId: targetUserId,
+      leaveType,
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
+      reason,
+      isApproved: isAdmin ? Boolean(isApproved) : false, // User ทั่วไปต้องรออนุมัติเสมอ
+    },
+    include: { user: true },
+  });
+
+  return NextResponse.json(newLeave);
 }

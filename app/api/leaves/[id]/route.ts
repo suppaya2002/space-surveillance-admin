@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import prisma from "@/lib/prisma";
 
+// อนุมัติ / ปฏิเสธการลา (เฉพาะ Admin)
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const session = await auth();
   const currentUser = session?.user as any;
@@ -12,9 +13,16 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const { isApproved } = await req.json();
 
+  if (isApproved === false) {
+    // หากกดปฏิเสธ ให้ลบคำขอหรืออัปเดตเป็นไม่อนุมัติ
+    await prisma.leaveRecord.delete({ where: { id: params.id } });
+    return NextResponse.json({ message: "คำขอถูกปฏิเสธและลบออกจากระบบ" });
+  }
+
   const updated = await prisma.leaveRecord.update({
     where: { id: params.id },
-    data: { isApproved },
+    data: { isApproved: true },
   });
+
   return NextResponse.json(updated);
 }
