@@ -1,29 +1,45 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { generateAutoDutySchedule } from "@/lib/scheduler";
+import { generateAutoDuty } from "@/lib/scheduler";
 
 export async function POST(req: Request) {
   const session = await auth();
-
-  // จำกัดให้เฉพาะระดับ Admin และ Super Admin สั่งรันระบบจัดเวร
   const userRole = (session?.user as any)?.role;
-if (!session || (userRole !== "ADMIN" && userRole !== "SUPER_ADMIN")) {
-    return NextResponse.json({ error: "ไม่ได้รับอนุญาต (Unauthorized)" }, { status: 403 });
+
+  // เฉพาะ Admin และ Super Admin ที่สั่งรันระบบจัดเวรอัตโนมัติได้
+  if (!userRole || (userRole !== "ADMIN" && userRole !== "SUPER_ADMIN")) {
+    return NextResponse.json({ error: "ไม่ได้รับอนุญาต" }, { status: 403 });
   }
 
   try {
     const body = await req.json();
-    const { taskTypeId, targetDate, primaryCount, reserveCount } = body;
+    const { dutyCategoryId, startDate, endDate } = body;
 
-    const result = await generateAutoDutySchedule({
-      taskTypeId,
-      targetDate: new Date(targetDate),
-      primaryCount: Number(primaryCount),
-      reserveCount: Number(reserveCount),
+    if (!dutyCategoryId || !startDate) {
+      return NextResponse.json(
+        { error: "กรุณาระบุหมวดหมู่เวรและวันที่ให้ครบถ้วน" },
+        { status: 400 }
+      );
+    }
+
+    const start = new Date(startDate);
+    const end = endDate ? new Date(endDate) : start;
+
+    const result = await generateAutoDuty({
+      dutyCategoryId,
+      startDate: start,
+      endDate: end,
     });
 
-    return NextResponse.json({ success: true, result });
+    return NextResponse.json({
+      success: true,
+      message: "จัดเวรอัตโนมัติสำเร็จ",
+      data: result,
+    });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || "เกิดข้อผิดพลาดในการประมวลผล" }, { status: 400 });
+    return NextResponse.json(
+      { error: error.message || "เกิดข้อผิดพลาดในการคำนวณจัดเวร" },
+      { status: 500 }
+    );
   }
 }

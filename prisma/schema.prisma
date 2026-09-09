@@ -7,95 +7,127 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// ------------------------------------------------------
+// ระดับสิทธิ์ และ สถานะการอนุมัติผู้ใช้งาน
+// ------------------------------------------------------
 enum Role {
-  SUPER_ADMIN
-  ADMIN
-  USER
+  SUPER_ADMIN // แอดมินสูงสุดคนเดียว คุมสิทธิ์และแต่งตั้ง ADMIN
+  ADMIN       // จัดการเวร อนุมัติการลา ลงบันทึกราชการ
+  USER        // กำลังพลทั่วไป ส่งคำขอลา ดูปฏิทินและสถิติตนเอง
 }
 
 enum UserStatus {
+  PENDING   // รอแอดมินใส่ชื่อ-สกุลจริงและกดอนุมัติ
+  APPROVED  // ใช้งานระบบได้
+  SUSPENDED // ระงับการใช้งานชั่วคราว
+}
+
+enum OfficerType {
+  COMMISSIONED     // สัญญาบัตร
+  NON_COMMISSIONED // ประทวน
+}
+
+model User {
+  id            String       @id @default(cuid())
+  email         String       @unique
+  name          String?      // ชื่อที่ดึงมาจาก Google ตอนแรก
+  officialName  String?      // ยศ ชื่อ สกุลจริง (แอดมินเป็นผู้กรอกก่อนอนุมัติ)
+  rank          String?      // เช่น จ.ต., จ.ท., จ.อ., ร.ต.
+  officerType   OfficerType  @default(NON_COMMISSIONED)
+  role          Role         @default(USER)
+  status        UserStatus   @default(PENDING)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  leaves        LeaveRecord[]
+  deployments   DeploymentMember[]
+  dutyAssigns   DutyAssignment[]
+}
+
+// ------------------------------------------------------
+// หน้าที่ 1: ระบบบันทึกการลา และ ปฏิทินกลาง
+// ------------------------------------------------------
+enum LeaveType {
+  ANNUAL          // ลาพักผ่อน
+  SICK            // ลาป่วย
+  BUSINESS        // ลากิจส่วนตัว
+  OFFICIAL_DUTY   // ปฏิบัติราชการ/ภารกิจพิเศษ
+  OTHER           // อื่นๆ
+}
+
+enum ApprovalStatus {
   PENDING
   APPROVED
   REJECTED
 }
 
-enum RankType {
-  COMMISSIONED     // สัญญาบัตร
-  NON_COMMISSIONED // ประทวน
-}
-
-enum DutyStation {
-  SURAT_THANI // สฝอว.สม.
-  DON_MUEANG  // สฝอว.ดน.
-  OTHER       // ราชการอื่นๆ
-}
-
-model User {
-  id            String      @id @default(cuid())
-  email         String      @unique
-  name          String?     // ชื่อจาก Google
-  officialName  String?     // ยศ-ชื่อ-นามสกุล ที่แอดมินกำหนด
-  rankType      RankType?
-  role          Role        @default(USER)
-  status        UserStatus  @default(PENDING)
-  createdAt     DateTime    @default(now())
-  leaves        LeaveRequest[]
-  dutyAssignees DutyAssignment[]
-  deployments   DeploymentMember[]
-}
-
-model LeaveRequest {
-  id          String    @id @default(cuid())
+model LeaveRecord {
+  id          String         @id @default(cuid())
   userId      String
-  user        User      @relation(fields: [userId], references: [id])
-  leaveType   String    // ลาพักผ่อน, ลากิจ, ลาป่วย ฯลฯ
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        LeaveType
+  reason      String?
   startDate   DateTime
   endDate     DateTime
-  reason      String?
-  isApproved  Boolean   @default(false)
-  approvedBy  String?
-  createdAt   DateTime  @default(now())
+  status      ApprovalStatus @default(PENDING) // user ส่งมาต้อง pending, admin ลงเอง approved ทันที
+  approvedBy  String?        // เก็บ email หรือ id แอดมินที่อนุมัติ
+  createdAt   DateTime       @default(now())
 }
 
-model Deployment {
+// ------------------------------------------------------
+// หน้าที่ 2: ทะเบียนไปราชการประจำกอง
+// ------------------------------------------------------
+enum DeploymentLocation {
+  SAMUT_SONGKRAM // สฝอว.สม.
+  DON_MUEANG     // สฝอว.ดน.
+  OTHER          // ราชการอื่นๆ
+}
+
+model OfficialDeployment {
   id          String             @id @default(cuid())
-  station     DutyStation
-  batchNumber Int                // ลำดับผลัด
-  yearBe      Int                // ปี พ.ศ.
+  location    DeploymentLocation
+  batchNumber Int                // ลำดับผลัด เช่น 1, 2, 3
+  buddhistYear Int               // ปี พ.ศ. เช่น 2569, 2570
   startDate   DateTime
   endDate     DateTime
-  description String?
+  note        String?
   members     DeploymentMember[]
+  createdAt   DateTime           @default(now())
 }
 
 model DeploymentMember {
-  id           String     @id @default(cuid())
+  id           String             @id @default(cuid())
   deploymentId String
+  deployment   OfficialDeployment @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
   userId       String
-  deployment   Deployment @relation(fields: [deploymentId], references: [id])
-  user         User       @relation(fields: [userId], references: [id])
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model TaskType {
-  id              String         @id @default(cuid())
-  name            String         // เช่น เวรนำแถว, เวรบรรยายสรุป
-  allowedRankType RankType?      // กรองเฉพาะสัญญาบัตร หรือ ประทวน (null คือได้ทั้งหมด)
-  duties          DutySchedule[]
+// ------------------------------------------------------
+// หน้าที่ 3 & 4: ระบบจัดเวรอัตโนมัติ และสถิติ
+// ------------------------------------------------------
+model DutyCategory {
+  id               String      @id @default(cuid())
+  name             String      // เช่น "เวรนำแถว 1-5", "เวรบรรยายสรุป", "เวรพูดหน้าแถว"
+  targetOfficer    OfficerType // กำหนดว่าเวรนี้สำหรับ สัญญาบัตร หรือ ประทวน
+  slotsPrimary     Int         @default(1) // จำนวนตัวจริง
+  slotsReserve     Int         @default(1) // จำนวนสำรอง
+  assignments      DutyAssignment[]
 }
 
-model DutySchedule {
-  id          String           @id @default(cuid())
-  taskTypeId  String
-  taskType    TaskType         @relation(fields: [taskTypeId], references: [id])
-  date        DateTime
-  assignments DutyAssignment[]
+enum AssignmentRole {
+  PRIMARY // ตัวจริง
+  RESERVE // สำรอง
 }
 
 model DutyAssignment {
-  id             String       @id @default(cuid())
-  dutyScheduleId String
-  dutySchedule   DutySchedule @relation(fields: [dutyScheduleId], references: [id])
+  id             String         @id @default(cuid())
+  dutyCategoryId String
+  dutyCategory   DutyCategory   @relation(fields: [dutyCategoryId], references: [id], onDelete: Cascade)
   userId         String
-  user           User         @relation(fields: [userId], references: [id])
-  isPrimary      Boolean      @default(true) // true = ตัวจริง, false = ตัวสำรอง
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dutyDate       DateTime       // วันที่เข้าเวร
+  role           AssignmentRole @default(PRIMARY)
+  buddhistYear   Int            // ปี พ.ศ. สำหรับรวมสถิติไม่ให้หาย
+  createdAt      DateTime       @default(now())
 }

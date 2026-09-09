@@ -1,173 +1,205 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 
-interface UserProfile {
+interface UserItem {
   id: string;
   email: string;
   name: string | null;
   officialName: string | null;
-  rankType: "COMMISSIONED" | "NON_COMMISSIONED" | null;
+  rank: string | null;
+  officerType: "COMMISSIONED" | "NON_COMMISSIONED";
   role: "SUPER_ADMIN" | "ADMIN" | "USER";
-  status: "PENDING" | "APPROVED" | "REJECTED";
+  status: "PENDING" | "APPROVED" | "SUSPENDED";
 }
 
-export default function UserApprovalPage() {
+export default function AdminUsersPage() {
   const { data: session } = useSession();
-  const [users, setUsers] = useState<UserProfile[]>([]);
-  const isSuperAdmin = (session?.user as any)?.role === "SUPER_ADMIN";
+  const currentUser = session?.user as any;
+  const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
+
+  const [users, setUsers] = useState<UserItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState<string | null>(null);
 
   const fetchUsers = async () => {
-    const res = await fetch("/api/admin/users");
-    if (res.ok) setUsers(await res.json());
+    try {
+      const res = await fetch("/api/admin/users");
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     fetchUsers();
   }, []);
 
-  const handleUpdateUser = async (
-    userId: string,
-    updates: Partial<UserProfile>
-  ) => {
-    const res = await fetch(`/api/admin/users/${userId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updates),
-    });
-
-    if (res.ok) {
-      alert("อัปเดตข้อมูลผู้ใช้เรียบร้อย");
-      fetchUsers();
-    } else {
-      const err = await res.json();
-      alert(`ไม่สามารถบันทึกได้: ${err.message}`);
+  const handleUpdate = async (user: UserItem) => {
+    setSavingId(user.id);
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(user),
+      });
+      if (res.ok) {
+        alert("บันทึกข้อมูลเรียบร้อย");
+        fetchUsers();
+      } else {
+        const err = await res.json();
+        alert(err.error || "เกิดข้อผิดพลาด");
+      }
+    } catch {
+      alert("เชื่อมต่อเซิร์ฟเวอร์ล้มเหลว");
+    } finally {
+      setSavingId(null);
     }
   };
 
-  return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-800">
-          การอนุมัติและจัดการสิทธิ์ผู้ใช้งาน
-        </h1>
-        <p className="text-sm text-slate-500">
-          กำหนด ยศ-ชื่อ-นามสกุลจริง ให้กับบัญชี Gmail และแต่งตั้งบทบาทหน้าที่
-        </p>
-      </div>
+  const handleFieldChange = (id: string, field: keyof UserItem, value: any) => {
+    setUsers((prev) =>
+      prev.map((u) => (u.id === id ? { ...u, [field]: value } : u))
+    );
+  };
 
-      <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700">บัญชี Gmail</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700">ยศ - ชื่อ - นามสกุล ทางราชการ</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700">ประเภทกำลังพล</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700">ระดับสิทธิ์</th>
-              <th className="px-4 py-3 text-center font-semibold text-slate-700">สถานะ</th>
-              <th className="px-4 py-3 text-center font-semibold text-slate-700">การจัดการ</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-200">
-            {users.map((u) => (
-              <UserRowItem
-                key={u.id}
-                user={u}
-                isSuperAdmin={isSuperAdmin}
-                onSave={(updates) => handleUpdateUser(u.id, updates)}
-              />
-            ))}
-          </tbody>
-        </table>
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans p-6 md:p-10">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+          <div>
+            <div className="flex items-center space-x-2 text-xs text-blue-400 font-mono mb-1">
+              <Link href="/" className="hover:underline">DASHBOARD</Link>
+              <span>/</span>
+              <span>ADMINISTRATION</span>
+            </div>
+            <h1 className="text-2xl font-bold text-white tracking-tight">
+              จัดการและอนุมัติสิทธิ์ผู้ใช้งาน
+            </h1>
+            <p className="text-xs text-slate-400 mt-1">
+              กำหนด ยศ-ชื่อ-สกุลจริง ประเภทชั้นยศ และควบคุมสิทธิ์การเข้าถึงระบบ
+            </p>
+          </div>
+          <Link
+            href="/"
+            className="px-4 py-2 text-xs bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 rounded-lg transition self-start sm:self-auto"
+          >
+            ← กลับหน้าหลัก
+          </Link>
+        </div>
+
+        {/* User Table */}
+        <div className="bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-900 text-slate-400 border-b border-slate-800 font-semibold uppercase tracking-wider">
+                <tr>
+                  <th className="p-4">ผู้ใช้งาน (Google)</th>
+                  <th className="p-4">ยศ - ชื่อ สกุลจริง</th>
+                  <th className="p-4">ชั้นยศ</th>
+                  <th className="p-4">ระดับสิทธิ์</th>
+                  <th className="p-4">สถานะอนุมัติ</th>
+                  <th className="p-4 text-center">การกระทำ</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-8 text-slate-500">
+                      กำลังโหลดข้อมูล...
+                    </td>
+                  </tr>
+                ) : users.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-8 text-slate-500">
+                      ไม่พบข้อมูลผู้ใช้งาน
+                    </td>
+                  </tr>
+                ) : (
+                  users.map((u) => (
+                    <tr key={u.id} className="hover:bg-slate-800/30 transition">
+                      <td className="p-4">
+                        <div className="font-medium text-slate-200">{u.name || "-"}</div>
+                        <div className="text-[11px] text-slate-400 font-mono">{u.email}</div>
+                      </td>
+
+                      <td className="p-4">
+                        <input
+                          type="text"
+                          value={u.officialName || ""}
+                          placeholder="เช่น จ.อ.สัญญา บุวงศ์"
+                          onChange={(e) => handleFieldChange(u.id, "officialName", e.target.value)}
+                          className="bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 w-48"
+                        />
+                      </td>
+
+                      <td className="p-4">
+                        <select
+                          value={u.officerType}
+                          onChange={(e) => handleFieldChange(u.id, "officerType", e.target.value)}
+                          className="bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500"
+                        >
+                          <option value="NON_COMMISSIONED">ประทวน</option>
+                          <option value="COMMISSIONED">สัญญาบัตร</option>
+                        </select>
+                      </td>
+
+                      <td className="p-4">
+                        <select
+                          value={u.role}
+                          disabled={!isSuperAdmin && (u.role === "ADMIN" || u.role === "SUPER_ADMIN")}
+                          onChange={(e) => handleFieldChange(u.id, "role", e.target.value)}
+                          className="bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                        >
+                          <option value="USER">USER</option>
+                          <option value="ADMIN">ADMIN</option>
+                          {isSuperAdmin && <option value="SUPER_ADMIN">SUPER_ADMIN</option>}
+                        </select>
+                      </td>
+
+                      <td className="p-4">
+                        <select
+                          value={u.status}
+                          onChange={(e) => handleFieldChange(u.id, "status", e.target.value)}
+                          className={`border rounded px-2.5 py-1.5 text-xs font-semibold focus:outline-none ${
+                            u.status === "APPROVED"
+                              ? "bg-emerald-950/40 text-emerald-400 border-emerald-800"
+                              : u.status === "PENDING"
+                              ? "bg-amber-950/40 text-amber-400 border-amber-800"
+                              : "bg-red-950/40 text-red-400 border-red-800"
+                          }`}
+                        >
+                          <option value="PENDING">PENDING (รออนุมัติ)</option>
+                          <option value="APPROVED">APPROVED (อนุมัติแล้ว)</option>
+                          <option value="SUSPENDED">SUSPENDED (ระงับ)</option>
+                        </select>
+                      </td>
+
+                      <td className="p-4 text-center">
+                        <button
+                          onClick={() => handleUpdate(u)}
+                          disabled={savingId === u.id}
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white font-medium rounded transition"
+                        >
+                          {savingId === u.id ? "กำลังบันทึก..." : "บันทึก"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
-  );
-}
-
-function UserRowItem({
-  user,
-  isSuperAdmin,
-  onSave,
-}: {
-  user: UserProfile;
-  isSuperAdmin: boolean;
-  onSave: (updates: Partial<UserProfile>) => void;
-}) {
-  const [officialName, setOfficialName] = useState(user.officialName || "");
-  const [rankType, setRankType] = useState(user.rankType || "NON_COMMISSIONED");
-  const [role, setRole] = useState(user.role);
-
-  const handleApprove = () => {
-    if (!officialName.trim()) {
-      return alert("กรุณาระบุยศ-ชื่อ-สกุล จริงก่อนทำการอนุมัติ");
-    }
-    onSave({
-      officialName,
-      rankType,
-      role,
-      status: "APPROVED",
-    });
-  };
-
-  return (
-    <tr className="hover:bg-slate-50">
-      <td className="px-4 py-3">
-        <div className="font-medium text-slate-800">{user.email}</div>
-        <div className="text-xs text-slate-400">{user.name}</div>
-      </td>
-      <td className="px-4 py-3">
-        <input
-          type="text"
-          placeholder="เช่น จ.อ.สมชาย ใจดี"
-          className="border rounded px-2 py-1 text-sm w-full"
-          value={officialName}
-          onChange={(e) => setOfficialName(e.target.value)}
-        />
-      </td>
-      <td className="px-4 py-3">
-        <select
-          className="border rounded px-2 py-1 text-sm bg-white"
-          value={rankType}
-          onChange={(e) => setRankType(e.target.value as any)}
-        >
-          <option value="NON_COMMISSIONED">นายทหารประทวน</option>
-          <option value="COMMISSIONED">นายทหารสัญญาบัตร</option>
-        </select>
-      </td>
-      <td className="px-4 py-3">
-        <select
-          disabled={!isSuperAdmin || user.role === "SUPER_ADMIN"}
-          className="border rounded px-2 py-1 text-sm bg-white disabled:bg-slate-100"
-          value={role}
-          onChange={(e) => setRole(e.target.value as any)}
-        >
-          <option value="USER">User (ผู้ใช้ทั่วไป)</option>
-          <option value="ADMIN">Admin (ผู้ดูแลระบบ)</option>
-          {user.role === "SUPER_ADMIN" && <option value="SUPER_ADMIN">Super Admin</option>}
-        </select>
-      </td>
-      <td className="px-4 py-3 text-center">
-        <span
-          className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-            user.status === "APPROVED"
-              ? "bg-emerald-100 text-emerald-800"
-              : user.status === "PENDING"
-              ? "bg-amber-100 text-amber-800"
-              : "bg-red-100 text-red-800"
-          }`}
-        >
-          {user.status}
-        </span>
-      </td>
-      <td className="px-4 py-3 text-center space-x-2">
-        <button
-          onClick={handleApprove}
-          className="px-3 py-1 bg-blue-900 hover:bg-blue-800 text-white rounded text-xs font-medium"
-        >
-          บันทึก/อนุมัติ
-        </button>
-      </td>
-    </tr>
   );
 }

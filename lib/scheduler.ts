@@ -1,119 +1,84 @@
-import { prisma } from "@/lib/prisma";
-import { RankType } from "@prisma/client";
+import prisma from "@/lib/prisma";
+import { OfficerType, AssignmentRole } from "@prisma/client";
 
-interface AutoScheduleParams {
-  taskTypeId: string;
-  targetDate: Date;
-  primaryCount: number;
-  reserveCount: number;
+interface GenerateDutyParams {
+  dutyCategoryId: string;
+  startDate: Date;
+  endDate: Date;
 }
 
-export async function generateAutoDutySchedule({
-  taskTypeId,
-  targetDate,
-  primaryCount,
-  reserveCount,
-}: AutoScheduleParams) {
-  const task = await prisma.taskType.findUnique({
-    where: { id: taskTypeId },
+export async function generateAutoDuty({
+  dutyCategoryId,
+  startDate,
+  endDate,
+}: GenerateDutyParams) {
+  const category = await prisma.dutyCategory.findUnique({
+    where: { id: dutyCategoryId },
   });
 
-  if (!task) throw new Error("ไม่พบประเภทเวรที่ระบุ");
+  if (!category) throw new Error("ไม่พบหมวดหมู่เวร");
 
-  // 1. ดึงรายชื่อข้าราชการที่ได้รับอนุมัติ และมีชั้นยศตรงตามกำหนด
+  // 1. ดึงเฉพาะกำลังพลที่ APPROVED และตรงตามชั้นยศ (สัญญาบัตร หรือ ประทวน)
   const eligibleUsers = await prisma.user.findMany({
     where: {
       status: "APPROVED",
-      ...(task.allowedRankType ? { rankType: task.allowedRankType } : {}),
+      officerType: category.targetOfficer,
     },
     include: {
       leaves: {
         where: {
-          isApproved: true,
-          startDate: { lte: targetDate },
-          endDate: { gte: targetDate },
+          status: "APPROVED",
+          startDate: { lte: endDate },
+          endDate: { gte: startDate },
         },
       },
       deployments: {
-        where: {
-          deployment: {
-            startDate: { lte: targetDate },
-            endDate: { gte: targetDate },
-          },
+        include: {
+          deployment: true,
         },
       },
-      dutyAssignees: {
-        where: {
-          dutySchedule: {
-            date: targetDate,
-          },
-        },
-      },
+      dutyAssigns: true,
     },
   });
 
-  // 2. คัดกรองผู้ที่ไม่ติดภารกิจอื่นและไม่ลาในวันดังกล่าว
+  // 2. กรองคนที่ไม่ติดลา และไม่ติดไปราชการในช่วงเวลาดังกล่าว
   const availableUsers = eligibleUsers.filter((u) => {
-    const isFreeFromLeave = u.leaves.length === 0;
-    const isFreeFromDeployment = u.deployments.length === 0;
-    const isFreeFromOtherDuty = u.dutyAssignees.length === 0;
-    return isFreeFromLeave && isFreeFromDeployment && isFreeFromOtherDuty;
+    const hasLeave = u.leaves.length > 0;
+    const hasDeployment = u.deployments.some((d) => {
+      const depStart = new Date(d.deployment.startDate);
+      const depEnd = new Date(d.deployment.endDate);
+      return depStart <= endDate && depEnd >= startDate;
+    });
+    return !hasLeave && !hasDeployment;
   });
 
-  // 3. ดึงประวัติสถิติการเข้าเวรประเภทนี้ในอดีตเพื่อนับคะแนนถ่วงน้ำหนัก
-  const userScores = await Promise.all(
-    availableUsers.map(async (user) => {
-      const pastDutyCount = await prisma.dutyAssignment.count({
-        where: {
-          userId: user.id,
-          isPrimary: true,
-          dutySchedule: { taskTypeId: task.id },
-        },
-      });
-      return { user, score: pastDutyCount };
-    })
-  );
+  // 3. เรียงลำดับคนที่ทำสถิติเวรน้อยที่สุดขึ้นก่อน (Fair-Share)
+  availableUsers.sort((a, b) => a.dutyAssigns.length - b.dutyAssigns.length);
 
-  // เรียงลำดับจากผู้ที่เคยเข้าเวรน้อยที่สุดไปมากที่สุด
-  userScores.sort((a, b) => a.score - b.score);
+  const neededTotal = category.slotsPrimary + category.slotsReserve;
+  const selected = availableUsers.slice(0, neededTotal);
 
-  const totalNeeded = primaryCount + reserveCount;
-  if (userScores.length < totalNeeded) {
-    throw new Error(
-      `กำลังพลว่างไม่เพียงพอ (ต้องการ ${totalNeeded} นาย, ว่าง ${userScores.length} นาย)`
-    );
-  }
+  const buddhistYear = startDate.getFullYear() + 543;
+  const results = [];
 
-  const selected = userScores.slice(0, totalNeeded);
-  const primaries = selected.slice(0, primaryCount).map((s) => s.user.id);
-  const reserves = selected.slice(primaryCount).map((s) => s.user.id);
+  for (let i = 0; i < selected.length; i++) {
+    const role: AssignmentRole =
+      i < category.slotsPrimary ? AssignmentRole.PRIMARY : AssignmentRole.RESERVE;
 
-  // 4. บันทึกลงฐานข้อมูล
-  return await prisma.$transaction(async (tx) => {
-    const schedule = await tx.dutySchedule.create({
+    const assignment = await prisma.dutyAssignment.create({
       data: {
-        taskTypeId: task.id,
-        date: targetDate,
+        dutyCategoryId: category.id,
+        userId: selected[i].id,
+        dutyDate: startDate,
+        role,
+        buddhistYear,
+      },
+      include: {
+        user: true,
       },
     });
+    results.push(assignment);
+  }
 
-    const assignmentData = [
-      ...primaries.map((uid) => ({
-        dutyScheduleId: schedule.id,
-        userId: uid,
-        isPrimary: true,
-      })),
-      ...reserves.map((uid) => ({
-        dutyScheduleId: schedule.id,
-        userId: uid,
-        isPrimary: false,
-      })),
-    ];
-
-    await tx.dutyAssignment.createMany({
-      data: assignmentData,
-    });
-
-    return schedule;
-  });
+  return results;
 }
