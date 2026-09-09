@@ -13,17 +13,41 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ user }) {
       if (!user.email) return false;
 
-      const existingUser = await prisma.user.findUnique({
+      // ค้นหาว่ามีผู้ใช้งานนี้ในฐานข้อมูลหรือยัง
+      let existingUser = await prisma.user.findUnique({
         where: { email: user.email },
       });
 
-      return !!existingUser;
+      // ถ้ายังไม่มี ให้สร้างขึ้นใหม่ในฐานข้อมูลอัตโนมัติ
+      if (!existingUser) {
+        // ตรวจสอบว่าระบบมีผู้ใช้งานคนแรกหรือยัง (ถ้าเป็นคนแรกให้สิทธิ์ SUPER_ADMIN ทันที)
+        const userCount = await prisma.user.count();
+        const role = userCount === 0 ? "SUPER_ADMIN" : "USER";
+
+        existingUser = await prisma.user.create({
+          data: {
+            email: user.email,
+            name: user.name || "Unknown",
+            officialName: user.name || "Unknown",
+            image: user.image,
+            role: role,
+            status: userCount === 0 ? "APPROVED" : "PENDING",
+          },
+        });
+      }
+
+      return true;
     },
     async jwt({ token, user }) {
-      if (user) {
-        token.role = (user as any).role;
-        token.status = (user as any).status;
-        token.officialName = (user as any).officialName;
+      if (user?.email) {
+        const dbUser = await prisma.user.findUnique({
+          where: { email: user.email },
+        });
+        if (dbUser) {
+          token.role = dbUser.role;
+          token.status = dbUser.status;
+          token.officialName = dbUser.officialName;
+        }
       }
       return token;
     },
