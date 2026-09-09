@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import "./globals.css"; // <-- เพิ่มบรรทัดนี้เพื่อดึง Tailwind CSS มาใช้
+import "./globals.css";
 import SessionProvider from "@/components/SessionProvider";
 
 export const metadata: Metadata = {
