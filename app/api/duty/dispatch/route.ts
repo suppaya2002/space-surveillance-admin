@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { dispatchAutoDuty } from "@/lib/auto-dispatcher";
+import { db } from "@/lib/db";
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -26,16 +27,17 @@ export async function POST(req: Request) {
 
     const results = [];
 
-    // วนลูปจัดเวรทีละวัน (เพื่อให้สถิติ Fair-Share อัปเดตรายวัน)
+    // วนลูปจัดเวรทีละวันอย่างปลอดภัย
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const targetDateStr = new Date(d);
       try {
         const result = await dispatchAutoDuty({
           dutyTypeId,
-          targetDate: new Date(d),
+          targetDate: targetDateStr,
         });
         results.push(result);
       } catch (err: any) {
-        throw new Error(`ไม่สามารถจัดเวรวันที่ ${d.toLocaleDateString('th-TH')} ได้: ${err.message}`);
+        throw new Error(`ไม่สามารถจัดเวรวันที่ ${targetDateStr.toLocaleDateString('th-TH')} ได้: ${err.message}`);
       }
     }
 
