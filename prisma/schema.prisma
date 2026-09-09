@@ -89,7 +89,7 @@ model MissionStaff {
 model DutyType {
   id           String           @id @default(cuid())
   name         String           // เช่น เวรนำแถว, เวรบรรยายสรุป, เวรพูดหน้าแถว
-  requiredType OfficerCategory? // กำหนดเฉพาะสัญญาบัตร/ประทวน หรือ null หากเป็นใครก็ได้
+  requiredType OfficerCategory? // สัญญาบัตร / ประทวน หรือ null หากเป็นใครก็ได้
   mainCount    Int              @default(1)
   backupCount  Int              @default(1)
   schedules    DutySchedule[]

@@ -1,5 +1,4 @@
 import prisma from "@/lib/prisma";
-import { OfficerCategory } from "@prisma/client";
 
 interface DispatchParams {
   dutyTypeId: string;
@@ -15,7 +14,6 @@ export async function dispatchAutoDuty({ dutyTypeId, targetDate }: DispatchParam
   const endOfDay = new Date(targetDate);
   endOfDay.setHours(23, 59, 59, 999);
 
-  // 1. คัดกรองกำลังพล: สถานะ ACTIVE และตรงตามชั้นยศที่กำหนด
   const candidateFilter: any = { status: "ACTIVE" };
   if (dutyType.requiredType) {
     candidateFilter.category = dutyType.requiredType;
@@ -32,9 +30,7 @@ export async function dispatchAutoDuty({ dutyTypeId, targetDate }: DispatchParam
         },
       },
       missionStaff: {
-        include: {
-          batch: true,
-        },
+        include: { batch: true },
       },
       dutyStaff: {
         where: {
@@ -44,7 +40,6 @@ export async function dispatchAutoDuty({ dutyTypeId, targetDate }: DispatchParam
     },
   });
 
-  // 2. กรองคนที่ไม่ติดลาที่อนุมัติแล้ว และไม่ติดผลัดราชการ
   const availablePersonnel = candidates.filter((u) => {
     const isLeaving = u.leaves.length > 0;
     const isDeploying = u.missionStaff.some((ms) => {
@@ -62,12 +57,10 @@ export async function dispatchAutoDuty({ dutyTypeId, targetDate }: DispatchParam
     );
   }
 
-  // 3. เรียงลำดับผู้มีสถิติการเข้าเวรประเภทนี้น้อยที่สุดขึ้นก่อน
+  // Fair-share sort: เรียงลำดับคนที่ทำสถิติต่ำสุดขึ้นก่อน
   availablePersonnel.sort((a, b) => a.dutyStaff.length - b.dutyStaff.length);
 
-  // 4. บันทึกลงฐานข้อมูล DutySchedule และ DutyStaff
   return await prisma.$transaction(async (tx) => {
-    // ลบการจัดเดิมของวันและประเภทนั้น (หากมี)
     const existing = await tx.dutySchedule.findFirst({
       where: {
         dutyTypeId,
