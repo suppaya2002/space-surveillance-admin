@@ -16,7 +16,7 @@ interface UserProfile {
 export default function UserApprovalPage() {
   const { data: session } = useSession();
   const [users, setUsers] = useState<UserProfile[]>([]);
-  const isSuperAdmin = session?.user?.role === "SUPER_ADMIN";
+  const isSuperAdmin = (session?.user as any)?.role === "SUPER_ADMIN";
 
   const fetchUsers = async () => {
     const res = await fetch("/api/admin/users");
