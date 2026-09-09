@@ -6,7 +6,8 @@ export async function POST(req: Request) {
   const session = await auth();
 
   // จำกัดให้เฉพาะระดับ Admin และ Super Admin สั่งรันระบบจัดเวร
-  if (!session || (session.user.role !== "ADMIN" && session.user.role !== "SUPER_ADMIN")) {
+  const userRole = (session?.user as any)?.role;
+if (!session || (userRole !== "ADMIN" && userRole !== "SUPER_ADMIN")) {
     return NextResponse.json({ error: "ไม่ได้รับอนุญาต (Unauthorized)" }, { status: 403 });
   }
 
