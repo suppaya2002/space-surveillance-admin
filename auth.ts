@@ -1,62 +1,54 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
-import prisma from "@/lib/prisma";
+import { db } from "@/lib/db";
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
+export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      clientId: process.env.AUTH_GOOGLE_ID,
+      clientSecret: process.env.AUTH_GOOGLE_SECRET,
     }),
   ],
-  session: { strategy: "jwt" },
   callbacks: {
     async signIn({ user }) {
       if (!user.email) return false;
 
-      const userCount = await prisma.user.count();
-      const existing = await prisma.user.findUnique({ where: { email: user.email } });
+      // ตรวจสอบว่ามีอีเมลนี้ในฐานข้อมูลหรือยัง
+      let dbUser = await db.user.findUnique({
+        where: { email: user.email },
+      });
 
-      if (!existing) {
-        await prisma.user.create({
+      // ถ้ายังไม่เคยมีในระบบ ให้สร้างให้อัตโนมัติทันที
+      if (!dbUser) {
+        dbUser = await db.user.create({
           data: {
             email: user.email,
-            name: user.name,
-            role: userCount === 0 ? "SUPER_ADMIN" : "USER",
-            status: userCount === 0 ? "ACTIVE" : "PENDING",
+            name: user.name || "",
+            role: "USER",     // สิทธิ์เริ่มต้นทั่วไป
+            status: "ACTIVE", // เปิดใช้งานให้อัตโนมัติทันที ไม่ติด PENDING
           },
         });
       }
+
+      // อนุญาตให้ทุก Gmail ผ่านเข้าสู่ระบบได้ทันที
       return true;
     },
-    async jwt({ token }) {
-      if (token.email) {
-        const dbUser = await prisma.user.findUnique({ where: { email: token.email } });
+    async session({ session }) {
+      if (session.user?.email) {
+        const dbUser = await db.user.findUnique({
+          where: { email: session.user.email },
+        });
         if (dbUser) {
-          (token as any).id = dbUser.id;
-          (token as any).role = dbUser.role;
-          (token as any).status = dbUser.status;
-          (token as any).rank = dbUser.rank;
-          (token as any).firstName = dbUser.firstName;
-          (token as any).lastName = dbUser.lastName;
-          (token as any).category = dbUser.category;
+          (session.user as any).id = dbUser.id;
+          (session.user as any).role = dbUser.role;
+          (session.user as any).status = dbUser.status;
         }
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (token && session.user) {
-        const user = session.user as any;
-        const t = token as any;
-        user.id = t.id;
-        user.role = t.role;
-        user.status = t.status;
-        user.rank = t.rank;
-        user.firstName = t.firstName;
-        user.lastName = t.lastName;
-        user.category = t.category;
       }
       return session;
     },
+  },
+  pages: {
+    signIn: "/auth/signin",
+    error: "/auth/error",
   },
 });
