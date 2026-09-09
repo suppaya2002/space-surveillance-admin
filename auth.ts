@@ -5,8 +5,8 @@ import { prisma } from "@/lib/prisma";
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     GoogleProvider({
-      clientId: env.GOOGLE_CLIENT_ID,
-      clientSecret: env.GOOGLE_CLIENT_SECRET,
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
   ],
   callbacks: {
@@ -17,32 +17,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         where: { email: user.email },
       });
 
-      // หากเข้าใช้งานครั้งแรก ให้สร้างบัญชีด้วยสถานะ PENDING รอแอดมินกำหนดชื่อจริง
-      if (!existingUser) {
-        await prisma.user.create({
-          data: {
-            email: user.email,
-            name: user.name,
-            status: "PENDING",
-            role: "USER",
-          },
-        });
-      }
-
-      return true;
+      return !!existingUser;
     },
-    async session({ session }) {
-      if (session.user?.email) {
-        const dbUser = await prisma.user.findUnique({
-          where: { email: session.user.email },
-        });
-
-        if (dbUser) {
-          session.user.id = dbUser.id;
-          session.user.role = dbUser.role;
-          session.user.status = dbUser.status;
-          session.user.officialName = dbUser.officialName;
-        }
+    async jwt({ token, user }) {
+      if (user) {
+        token.role = (user as any).role;
+        token.status = (user as any).status;
+        token.officialName = (user as any).officialName;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user) {
+        (session.user as any).role = token.role;
+        (session.user as any).status = token.status;
+        (session.user as any).officialName = token.officialName;
       }
       return session;
     },
