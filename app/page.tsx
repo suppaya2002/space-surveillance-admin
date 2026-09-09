@@ -1,12 +1,14 @@
 "use client";
 
+import { useSession, signOut, signIn } from "next-auth/react";
 import { useState, useEffect } from "react";
 import {
   Calendar as CalendarIcon,
   Plane,
   Zap,
   BarChart3,
-  Users,
+  UserCheck,
+  LogOut,
   Plus,
   Check,
   X,
@@ -15,24 +17,29 @@ import {
   Clock,
   User as UserIcon,
   Download,
+  AlertCircle,
   Shield,
-  Layers,
 } from "lucide-react";
 
-export default function AdministrativeDashboard() {
+export default function SpaceSurveillanceDashboard() {
+  const { data: session, status } = useSession();
   const [currentTab, setCurrentTab] = useState<
-    "CALENDAR" | "DEPLOYMENT" | "DISPATCHER" | "ANALYTICS" | "PERSONNEL"
+    "CALENDAR" | "DEPLOYMENT" | "DISPATCHER" | "ANALYTICS" | "ADMIN_USERS"
   >("CALENDAR");
 
-  // Datasets
   const [users, setUsers] = useState<any[]>([]);
   const [leaves, setLeaves] = useState<any[]>([]);
   const [missions, setMissions] = useState<any[]>([]);
   const [dutyTypes, setDutyTypes] = useState<any[]>([]);
   const [dutySchedules, setDutySchedules] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+
+  const currentUser = session?.user as any;
+  const isPending = currentUser?.status === "PENDING";
+  const isAdmin = currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
+  const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
 
   const refreshAllData = async () => {
+    if (!session || isPending) return;
     try {
       const [uRes, lRes, mRes, dtRes, dsRes] = await Promise.all([
         fetch("/api/users"),
@@ -48,21 +55,72 @@ export default function AdministrativeDashboard() {
       if (dsRes.ok) setDutySchedules(await dsRes.json());
     } catch (err) {
       console.error(err);
-    } finally {
-      setLoading(false);
     }
   };
 
   useEffect(() => {
     refreshAllData();
-  }, []);
+  }, [session, isPending]);
+
+  if (status === "loading") {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-blue-400 font-mono text-sm">
+        กำลังโหลดระบบธุรการ กองเฝ้าระวังทางอวกาศ...
+      </div>
+    );
+  }
+
+  // หน้าต่างเมื่อยังไม่ได้ล็อกอิน
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl p-8 text-center space-y-5 shadow-2xl">
+          <div className="h-14 w-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center font-bold text-xl mx-auto shadow-lg shadow-blue-500/30">
+            กฝอ.
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-slate-800">กองเฝ้าระวังทางอวกาศ</h1>
+            <p className="text-xs text-slate-500 mt-1">ระบบบริหารงานธุรการ กำลังพล และการจัดเวร</p>
+          </div>
+          <button
+            onClick={() => signIn("google")}
+            className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl text-xs transition shadow-md shadow-blue-600/30"
+          >
+            เข้าสู่ระบบด้วย Google Account
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // หน้าต่างรอแอดมินอนุมัติสิทธิ์
+  if (isPending) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white border border-slate-200 rounded-2xl p-8 text-center space-y-4 shadow-xl">
+          <div className="w-14 h-14 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto text-amber-500">
+            <AlertCircle className="w-7 h-7" />
+          </div>
+          <h2 className="text-xl font-bold text-slate-800">รอผู้ดูแลระบบตรวจสอบ</h2>
+          <p className="text-sm text-slate-500 leading-relaxed">
+            บัญชี Google ({currentUser?.email}) บันทึกข้อมูลแล้ว อยู่ระหว่างรอผู้ดูแลระบบระบุ ยศ-ชื่อ-นามสกุลจริง และเปิดสิทธิ์การใช้งาน
+          </p>
+          <button
+            onClick={() => signOut()}
+            className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-xl transition shadow"
+          >
+            ออกจากระบบ
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex bg-slate-50 text-slate-800 font-sans antialiased">
-      {/* 1. Sidebar ด้านซ้าย สีน้ำเงินกรมท่า */}
+      {/* 1. Sidebar ด้านซ้าย: สีกรมท่าทางการ */}
       <aside className="w-64 bg-[#0a192f] text-slate-300 flex flex-col justify-between shrink-0 shadow-2xl border-r border-blue-950/40">
         <div>
-          {/* Logo & หน่วยงาน */}
           <div className="p-5 border-b border-blue-900/40 flex items-center space-x-3">
             <div className="h-10 w-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-black text-sm shadow-md shadow-blue-500/30">
               กฝอ.
@@ -77,18 +135,19 @@ export default function AdministrativeDashboard() {
             </div>
           </div>
 
-          {/* Navigation Links */}
           <nav className="p-3 space-y-1 text-xs font-medium">
             <button
               onClick={() => setCurrentTab("CALENDAR")}
-              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition ${
+              className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl transition ${
                 currentTab === "CALENDAR"
                   ? "bg-blue-600 text-white font-semibold shadow-lg shadow-blue-600/30"
                   : "text-slate-400 hover:bg-slate-800/60 hover:text-white"
               }`}
             >
-              <CalendarIcon className="w-4 h-4" />
-              <span>1. ปฏิทินและการลา</span>
+              <div className="flex items-center gap-3">
+                <CalendarIcon className="w-4 h-4" />
+                <span>1. ปฏิทินและคำขอลา</span>
+              </div>
             </button>
 
             <button
@@ -127,25 +186,39 @@ export default function AdministrativeDashboard() {
               <span>4. สถิติ & Export รายงาน</span>
             </button>
 
-            <button
-              onClick={() => setCurrentTab("PERSONNEL")}
-              className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition mt-4 ${
-                currentTab === "PERSONNEL"
-                  ? "bg-sky-600 text-white font-semibold shadow-lg shadow-sky-600/30"
-                  : "text-sky-300 hover:bg-slate-800/60"
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              <span>ทำเนียบกำลังพล</span>
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => setCurrentTab("ADMIN_USERS")}
+                className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl transition mt-4 ${
+                  currentTab === "ADMIN_USERS"
+                    ? "bg-amber-600 text-white font-semibold shadow-lg shadow-amber-600/30"
+                    : "text-amber-300 hover:bg-slate-800/60"
+                }`}
+              >
+                <UserCheck className="w-4 h-4" />
+                <span>กำลังพล & อนุมัติสิทธิ์</span>
+              </button>
+            )}
           </nav>
         </div>
 
-        {/* Footer Sidebar */}
         <div className="p-4 border-t border-blue-900/40 bg-[#061122]/60">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs text-slate-300 font-medium">เข้าถึงโหมดควบคุมส่วนกลาง</span>
+          <div className="flex items-center justify-between">
+            <div className="truncate">
+              <div className="text-xs font-bold text-white truncate">
+                {currentUser?.rank} {currentUser?.firstName} {currentUser?.lastName}
+              </div>
+              <div className="text-[10px] text-blue-300 font-mono">
+                {currentUser?.role} • {currentUser?.category === "COMMISSIONED" ? "สัญญาบัตร" : "ประทวน"}
+              </div>
+            </div>
+            <button
+              onClick={() => signOut()}
+              className="p-1.5 hover:bg-red-900/40 text-slate-400 hover:text-red-400 rounded-lg transition"
+              title="ออกจากระบบ"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </aside>
@@ -154,47 +227,50 @@ export default function AdministrativeDashboard() {
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         <header className="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
             <span className="text-xs font-semibold text-slate-700">
-              ระบบงานธุรการ กองเฝ้าระวังทางอวกาศ (Space Surveillance Division)
+              กองเฝ้าระวังทางอวกาศ (Space Surveillance Division)
             </span>
             <span className="text-slate-300">|</span>
-            <span className="text-xs font-medium text-slate-500 font-mono">
-              ปีงบประมาณ 2569
-            </span>
+            <span className="text-xs font-medium text-slate-500 font-mono">ปี พ.ศ. 2569</span>
           </div>
-          <span className="text-xs font-semibold px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg">
-            ระบบออนไลน์ (พร้อมปฏิบัติการ)
+          <span className="text-xs font-semibold px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg">
+            {currentUser?.rank} {currentUser?.firstName} ({currentUser?.role})
           </span>
         </header>
 
         <main className="p-8 max-w-7xl w-full mx-auto space-y-6">
           {currentTab === "CALENDAR" && (
-            <LightCalendarView
+            <Tab1Calendar
               leaves={leaves}
               duties={dutySchedules}
+              currentUser={currentUser}
+              isAdmin={isAdmin}
               users={users}
               onRefresh={refreshAllData}
             />
           )}
 
           {currentTab === "DEPLOYMENT" && (
-            <LightDeploymentView
+            <Tab2Deployment
               missions={missions}
               users={users}
+              isAdmin={isAdmin}
               onRefresh={refreshAllData}
             />
           )}
 
           {currentTab === "DISPATCHER" && (
-            <LightDispatcherView
+            <Tab3Dispatcher
               dutyTypes={dutyTypes}
               schedules={dutySchedules}
+              isAdmin={isAdmin}
               onRefresh={refreshAllData}
             />
           )}
 
           {currentTab === "ANALYTICS" && (
-            <LightAnalyticsView
+            <Tab4Analytics
               users={users}
               missions={missions}
               leaves={leaves}
@@ -202,8 +278,12 @@ export default function AdministrativeDashboard() {
             />
           )}
 
-          {currentTab === "PERSONNEL" && (
-            <LightPersonnelView users={users} onRefresh={refreshAllData} />
+          {currentTab === "ADMIN_USERS" && isAdmin && (
+            <TabAdminUsers
+              users={users}
+              isSuperAdmin={isSuperAdmin}
+              onRefresh={refreshAllData}
+            />
           )}
         </main>
       </div>
@@ -212,15 +292,16 @@ export default function AdministrativeDashboard() {
 }
 
 // ------------------------------------------------------------------------------------------------
-// Tab 1: ปฏิทินและการลา
+// หน้าที่ 1: ปฏิทินปฏิบัติงาน & คำขอลา
 // ------------------------------------------------------------------------------------------------
-function LightCalendarView({ leaves, duties, users, onRefresh }: any) {
+function Tab1Calendar({ leaves, duties, currentUser, isAdmin, users, onRefresh }: any) {
+  const [subTab, setSubTab] = useState<"CALENDAR" | "PENDING">("CALENDAR");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Form State
-  const [selectedUserId, setSelectedUserId] = useState("");
+  // Form State: User ล็อกอินจะถูกล็อกชื่อตัวเอง แอดมินสามารถเลือกใครก็ได้
+  const [targetUserId, setTargetUserId] = useState(currentUser.id);
   const [leaveType, setLeaveType] = useState("VACATION");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -239,34 +320,52 @@ function LightCalendarView({ leaves, duties, users, onRefresh }: any) {
   const handlePrevMonth = () => setCurrentDate(new Date(currentYear, currentMonth - 1, 1));
   const handleNextMonth = () => setCurrentDate(new Date(currentYear, currentMonth + 1, 1));
 
-  const handleApply = async (e: React.FormEvent) => {
+  const handleApplyLeave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedUserId) return alert("กรุณาเลือกรายชื่อกำลังพล");
     const res = await fetch("/api/leaves", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: selectedUserId, leaveType, startDate, endDate, reason }),
+      body: JSON.stringify({
+        userId: isAdmin ? targetUserId : currentUser.id,
+        leaveType,
+        startDate,
+        endDate,
+        reason,
+        isApproved: isAdmin, // Admin บันทึกจะอนุมัติทันที ถ้า User ทั่วไปจะเป็น false
+      }),
     });
     if (res.ok) {
-      alert("บันทึกการลาสำเร็จ");
-      setIsApplyModalOpen(false);
+      alert(isAdmin ? "บันทึกการลาสำเร็จ" : "ส่งคำขอลาเรียบร้อย รอแอดมินอนุมัติ");
+      setIsModalOpen(false);
       setReason("");
       onRefresh();
     }
   };
 
+  const handleApproveLeave = async (id: string, isApproved: boolean) => {
+    await fetch(`/api/leaves/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isApproved }),
+    });
+    onRefresh();
+  };
+
   const targetDateStr = selectedDate.toISOString().split("T")[0];
 
-  const activeLeavesForDay = leaves.filter((l: any) => {
+  const approvedLeavesForDay = leaves.filter((l: any) => {
+    if (!l.isApproved) return false;
     const s = new Date(l.startDate).toISOString().split("T")[0];
     const e = new Date(l.endDate).toISOString().split("T")[0];
     return targetDateStr >= s && targetDateStr <= e;
   });
 
-  const activeDutiesForDay = duties.filter((d: any) => {
+  const dutiesForDay = duties.filter((d: any) => {
     const dutyDate = new Date(d.dutyDate).toISOString().split("T")[0];
     return dutyDate === targetDateStr;
   });
+
+  const pendingLeaves = leaves.filter((l: any) => !l.isApproved);
 
   const leaveTypeMap: Record<string, { label: string; badge: string }> = {
     VACATION: { label: "ลาพักผ่อน", badge: "bg-emerald-50 text-emerald-700 border-emerald-200" },
@@ -290,25 +389,52 @@ function LightCalendarView({ leaves, duties, users, onRefresh }: any) {
           </div>
         </div>
 
-        <button
-          onClick={() => setIsApplyModalOpen(true)}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-xl transition shadow-md shadow-blue-600/20 flex items-center gap-1.5"
-        >
-          <Plus className="w-4 h-4" /> บันทึกการลา
-        </button>
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <div className="bg-slate-100 p-1 rounded-xl flex text-xs font-semibold text-slate-600">
+              <button
+                onClick={() => setSubTab("CALENDAR")}
+                className={`px-3.5 py-1.5 rounded-lg transition ${subTab === "CALENDAR" ? "bg-white text-slate-900 shadow-sm" : ""}`}
+              >
+                ปฏิทิน
+              </button>
+              <button
+                onClick={() => setSubTab("PENDING")}
+                className={`px-3.5 py-1.5 rounded-lg transition flex items-center gap-1.5 ${subTab === "PENDING" ? "bg-white text-slate-900 shadow-sm" : ""}`}
+              >
+                <span>คำขอรออนุมัติ</span>
+                {pendingLeaves.length > 0 && (
+                  <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[10px] flex items-center justify-center">
+                    {pendingLeaves.length}
+                  </span>
+                )}
+              </button>
+            </div>
+          )}
+
+          <button
+            onClick={() => {
+              setTargetUserId(currentUser.id);
+              setIsModalOpen(true);
+            }}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-xl transition shadow-md shadow-blue-600/20 flex items-center gap-1.5"
+          >
+            <Plus className="w-4 h-4" /> {isAdmin ? "บันทึกการลา" : "ยื่นคำขอลาตนเอง"}
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* ปฏิทินฝั่งซ้าย */}
-        <div className="lg:col-span-8 bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+      {subTab === "CALENDAR" ? (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* ปฏิทินรายเดือน */}
+          <div className="lg:col-span-8 bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-slate-900">
                 {thaiMonths[currentMonth]} พ.ศ. {currentYear + 543}
               </h3>
               <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden text-xs">
                 <button onClick={handlePrevMonth} className="p-1.5 hover:bg-slate-50 text-slate-600">
-                  <ChevronLeft className="w-4 h-4" />
+                  <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={() => {
@@ -321,194 +447,233 @@ function LightCalendarView({ leaves, duties, users, onRefresh }: any) {
                   วันนี้
                 </button>
                 <button onClick={handleNextMonth} className="p-1.5 hover:bg-slate-50 text-slate-600">
-                  <ChevronRight className="w-4 h-4" />
+                  <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
-          </div>
 
-          <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold py-2 border-b border-slate-100">
-            <span className="text-rose-500">อา.</span>
-            <span className="text-slate-600">จ.</span>
-            <span className="text-slate-600">อ.</span>
-            <span className="text-slate-600">พ.</span>
-            <span className="text-slate-600">พฤ.</span>
-            <span className="text-slate-600">ศ.</span>
-            <span className="text-blue-500">ส.</span>
-          </div>
+            <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold py-2 border-b border-slate-100">
+              <span className="text-rose-500">อา.</span>
+              <span className="text-slate-600">จ.</span>
+              <span className="text-slate-600">อ.</span>
+              <span className="text-slate-600">พ.</span>
+              <span className="text-slate-600">พฤ.</span>
+              <span className="text-slate-600">ศ.</span>
+              <span className="text-blue-500">ส.</span>
+            </div>
 
-          <div className="grid grid-cols-7 gap-2">
-            {Array.from({ length: startDayOfWeek }).map((_, i) => (
-              <div key={`empty-${i}`} className="min-h-[96px] rounded-xl bg-slate-50/40 border border-transparent" />
-            ))}
+            <div className="grid grid-cols-7 gap-2">
+              {Array.from({ length: startDayOfWeek }).map((_, i) => (
+                <div key={`empty-${i}`} className="min-h-[96px] rounded-xl bg-slate-50/40 border border-transparent" />
+              ))}
 
-            {Array.from({ length: daysInMonth }).map((_, i) => {
-              const dayNumber = i + 1;
-              const cellDate = new Date(currentYear, currentMonth, dayNumber);
-              const cellDateStr = cellDate.toISOString().split("T")[0];
-              const isSelected = selectedDate.toDateString() === cellDate.toDateString();
+              {Array.from({ length: daysInMonth }).map((_, i) => {
+                const dayNumber = i + 1;
+                const cellDate = new Date(currentYear, currentMonth, dayNumber);
+                const cellDateStr = cellDate.toISOString().split("T")[0];
+                const isSelected = selectedDate.toDateString() === cellDate.toDateString();
 
-              const dayLeaves = leaves.filter((l: any) => {
-                const s = new Date(l.startDate).toISOString().split("T")[0];
-                const e = new Date(l.endDate).toISOString().split("T")[0];
-                return cellDateStr >= s && cellDateStr <= e;
-              });
+                const dayLeaves = leaves.filter((l: any) => {
+                  if (!l.isApproved) return false;
+                  const s = new Date(l.startDate).toISOString().split("T")[0];
+                  const e = new Date(l.endDate).toISOString().split("T")[0];
+                  return cellDateStr >= s && cellDateStr <= e;
+                });
 
-              const dayDuties = duties.filter((d: any) => {
-                const dutyDate = new Date(d.dutyDate).toISOString().split("T")[0];
-                return dutyDate === cellDateStr;
-              });
+                const dayDuties = duties.filter((d: any) => {
+                  const dutyDate = new Date(d.dutyDate).toISOString().split("T")[0];
+                  return dutyDate === cellDateStr;
+                });
 
-              return (
-                <div
-                  key={`day-${dayNumber}`}
-                  onClick={() => setSelectedDate(cellDate)}
-                  className={`min-h-[96px] rounded-xl p-2 border transition flex flex-col justify-between cursor-pointer ${
-                    isSelected
-                      ? "bg-blue-50/40 border-blue-500 shadow-sm ring-1 ring-blue-500"
-                      : "bg-white border-slate-200 hover:border-blue-300"
-                  }`}
-                >
-                  <span className={`text-xs font-mono font-bold ${isSelected ? "text-blue-600" : "text-slate-700"}`}>
-                    {dayNumber}
-                  </span>
+                return (
+                  <div
+                    key={`day-${dayNumber}`}
+                    onClick={() => setSelectedDate(cellDate)}
+                    className={`min-h-[96px] rounded-xl p-2 border transition flex flex-col justify-between cursor-pointer ${
+                      isSelected
+                        ? "bg-blue-50/40 border-blue-500 shadow-sm ring-1 ring-blue-500"
+                        : "bg-white border-slate-200 hover:border-blue-300"
+                    }`}
+                  >
+                    <span className={`text-xs font-mono font-bold ${isSelected ? "text-blue-600" : "text-slate-700"}`}>
+                      {dayNumber}
+                    </span>
 
-                  <div className="space-y-1 overflow-hidden">
-                    {dayLeaves.slice(0, 2).map((l: any) => (
-                      <div key={l.id} className="text-[10px] bg-amber-50 border border-amber-200 text-amber-800 px-1.5 py-0.5 rounded font-medium truncate">
-                        ลา: {l.user?.rank} {l.user?.firstName}
-                      </div>
-                    ))}
-                    {dayDuties.slice(0, 1).map((d: any) => (
-                      <div key={d.id} className="text-[10px] bg-blue-50 border border-blue-200 text-blue-700 px-1.5 py-0.5 rounded font-medium truncate">
-                        เวร: {d.dutyType.name}
-                      </div>
-                    ))}
-                    {dayLeaves.length + dayDuties.length > 2 && (
-                      <div className="text-[9px] text-slate-400 font-mono text-center">
-                        +{dayLeaves.length + dayDuties.length - 2} รายการ
-                      </div>
-                    )}
+                    <div className="space-y-1 overflow-hidden">
+                      {dayLeaves.slice(0, 2).map((l: any) => (
+                        <div key={l.id} className="text-[10px] bg-amber-50 border border-amber-200 text-amber-800 px-1.5 py-0.5 rounded font-medium truncate">
+                          ลา: {l.user?.rank} {l.user?.firstName}
+                        </div>
+                      ))}
+                      {dayDuties.slice(0, 1).map((d: any) => (
+                        <div key={d.id} className="text-[10px] bg-blue-50 border border-blue-200 text-blue-700 px-1.5 py-0.5 rounded font-medium truncate">
+                          เวร: {d.dutyType.name}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
 
-        {/* รายละเอียดประจำวันฝั่งขวา */}
-        <div className="lg:col-span-4 bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-            <div>
+          {/* รายละเอียดประจำวันที่กดเลือก */}
+          <div className="lg:col-span-4 bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-6">
+            <div className="border-b border-slate-100 pb-4">
               <h3 className="text-sm font-bold text-slate-900">รายละเอียดประจำวัน</h3>
               <p className="text-xs font-semibold text-blue-600 mt-0.5">
                 {selectedDate.getDate()} {thaiMonths[selectedDate.getMonth()]} พ.ศ. {selectedDate.getFullYear() + 543}
               </p>
             </div>
-            <button
-              onClick={() => setIsApplyModalOpen(true)}
-              className="px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 rounded-lg text-xs font-semibold transition"
-            >
-              + บันทึกการลา
-            </button>
-          </div>
 
-          {/* รายชื่อคนลา */}
-          <div className="space-y-3">
-            <span className="font-bold text-slate-700 text-xs flex items-center gap-1.5">
-              <UserIcon className="w-3.5 h-3.5 text-amber-500" /> กำลังพลที่ลา ({activeLeavesForDay.length} นาย)
-            </span>
+            <div className="space-y-3">
+              <span className="font-bold text-slate-700 text-xs flex items-center gap-1.5">
+                <UserIcon className="w-3.5 h-3.5 text-amber-500" /> กำลังพลที่ลา ({approvedLeavesForDay.length} นาย)
+              </span>
 
-            {activeLeavesForDay.length === 0 ? (
-              <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl text-center text-xs text-slate-400">
-                ไม่มีกำลังพลลาในวันนี้
-              </div>
-            ) : (
-              <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
-                {activeLeavesForDay.map((l: any) => {
-                  const info = leaveTypeMap[l.leaveType] || leaveTypeMap.OTHER;
-                  return (
-                    <div key={l.id} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-1.5 text-xs">
-                      <div className="flex justify-between items-start">
-                        <div className="font-bold text-slate-800">
-                          {l.user?.rank} {l.user?.firstName} {l.user?.lastName}
+              {approvedLeavesForDay.length === 0 ? (
+                <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl text-center text-xs text-slate-400">
+                  ไม่มีกำลังพลลาในวันนี้
+                </div>
+              ) : (
+                <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+                  {approvedLeavesForDay.map((l: any) => {
+                    const info = leaveTypeMap[l.leaveType] || leaveTypeMap.OTHER;
+                    return (
+                      <div key={l.id} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-1.5 text-xs">
+                        <div className="flex justify-between items-start">
+                          <div className="font-bold text-slate-800">
+                            {l.user?.rank} {l.user?.firstName} {l.user?.lastName}
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${info.badge}`}>
+                            {info.label}
+                          </span>
                         </div>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${info.badge}`}>
-                          {info.label}
-                        </span>
+                        {l.reason && <p className="text-[11px] text-slate-600">เหตุผล: {l.reason}</p>}
                       </div>
-                      {l.reason && <p className="text-[11px] text-slate-600">เหตุผล: {l.reason}</p>}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
-          {/* รายชื่อเวร */}
-          <div className="space-y-3 pt-2 border-t border-slate-100">
-            <span className="font-bold text-slate-700 text-xs flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-blue-500" /> เวรผลัดประจำวัน ({activeDutiesForDay.length} รายการ)
-            </span>
+            <div className="space-y-3 pt-2 border-t border-slate-100">
+              <span className="font-bold text-slate-700 text-xs flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-blue-500" /> เวรผลัดประจำวัน ({dutiesForDay.length} รายการ)
+              </span>
 
-            {activeDutiesForDay.length === 0 ? (
-              <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl text-center text-xs text-slate-400">
-                ไม่มีการจัดเวรในวันนี้
-              </div>
-            ) : (
-              <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
-                {activeDutiesForDay.map((d: any) => (
-                  <div key={d.id} className="p-3 rounded-xl border border-blue-100 bg-blue-50/40 space-y-1.5 text-xs">
-                    <div className="font-bold text-blue-900">{d.dutyType.name}</div>
-                    <div className="space-y-1">
-                      {d.staffs.map((st: any) => (
-                        <div key={st.id} className="flex justify-between items-center text-[11px]">
-                          <span className="text-slate-700">
-                            {st.user.rank} {st.user.firstName} {st.user.lastName}
-                          </span>
-                          <span
-                            className={`px-1.5 py-0.5 rounded text-[9px] font-semibold font-mono ${
-                              st.isBackup ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-800"
-                            }`}
-                          >
-                            {st.isBackup ? "ตัวสำรอง" : "ตัวจริง"}
-                          </span>
-                        </div>
-                      ))}
+              {dutiesForDay.length === 0 ? (
+                <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl text-center text-xs text-slate-400">
+                  ไม่มีการจัดเวรในวันนี้
+                </div>
+              ) : (
+                <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+                  {dutiesForDay.map((d: any) => (
+                    <div key={d.id} className="p-3 rounded-xl border border-blue-100 bg-blue-50/40 space-y-1.5 text-xs">
+                      <div className="font-bold text-blue-900">{d.dutyType.name}</div>
+                      <div className="space-y-1">
+                        {d.staffs.map((st: any) => (
+                          <div key={st.id} className="flex justify-between items-center text-[11px]">
+                            <span className="text-slate-700">
+                              {st.user.rank} {st.user.firstName} {st.user.lastName}
+                            </span>
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-semibold font-mono ${
+                                st.isBackup ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-800"
+                              }`}
+                            >
+                              {st.isBackup ? "ตัวสำรอง" : "ตัวจริง"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        /* แถบพิจารณาอนุมัติคำขอลา (เฉพาะแอดมิน) */
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
+          <h3 className="text-sm font-bold text-slate-900">รายการคำขอลาที่รอการอนุมัติ</h3>
+          {pendingLeaves.length === 0 ? (
+            <p className="text-xs text-slate-500 py-8 text-center">ไม่มีรายการค้างอนุมัติ</p>
+          ) : (
+            <div className="space-y-2">
+              {pendingLeaves.map((item: any) => (
+                <div key={item.id} className="p-4 rounded-xl border border-slate-200 flex justify-between items-center text-xs">
+                  <div>
+                    <div className="font-bold text-slate-800">
+                      {item.user.rank} {item.user.firstName} {item.user.lastName}
+                    </div>
+                    <div className="text-slate-500 mt-0.5">
+                      ประเภท: {leaveTypeMap[item.leaveType]?.label || item.leaveType} •{" "}
+                      {new Date(item.startDate).toLocaleDateString("th-TH")} ถึง{" "}
+                      {new Date(item.endDate).toLocaleDateString("th-TH")}
+                    </div>
+                    {item.reason && <p className="text-slate-600 mt-1 italic">"{item.reason}"</p>}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleApproveLeave(item.id, true)}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold flex items-center gap-1"
+                    >
+                      <Check className="w-3.5 h-3.5" /> อนุมัติ
+                    </button>
+                    <button
+                      onClick={() => handleApproveLeave(item.id, false)}
+                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-semibold flex items-center gap-1"
+                    >
+                      <X className="w-3.5 h-3.5" /> ปฏิเสธ
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
-      {/* Modal บันทึกการลา */}
-      {isApplyModalOpen && (
+      {/* Modal ยื่นคำขอลา */}
+      {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-2xl">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-              <h3 className="text-base font-bold text-slate-900">บันทึกการลากำลังพล</h3>
-              <button onClick={() => setIsApplyModalOpen(false)}><X className="w-4 h-4 text-slate-400" /></button>
+              <h3 className="text-base font-bold text-slate-900">
+                {isAdmin ? "บันทึกการลา" : "ยื่นคำขอลาตนเอง"}
+              </h3>
+              <button onClick={() => setIsModalOpen(false)}><X className="w-4 h-4 text-slate-400" /></button>
             </div>
-            <form onSubmit={handleApply} className="space-y-3 text-xs">
-              <div>
-                <label className="text-slate-600 block mb-1 font-medium">เลือกกำลังพล</label>
-                <select
-                  value={selectedUserId}
-                  onChange={(e) => setSelectedUserId(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg p-2.5 text-slate-800"
-                  required
-                >
-                  <option value="">-- เลือกกำลังพล --</option>
-                  {users.map((u: any) => (
-                    <option key={u.id} value={u.id}>
-                      {u.rank} {u.firstName} {u.lastName} ({u.category === "COMMISSIONED" ? "สัญญาบัตร" : "ประทวน"})
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <form onSubmit={handleApplyLeave} className="space-y-3 text-xs">
+              {isAdmin ? (
+                <div>
+                  <label className="text-slate-600 block mb-1 font-medium">เลือกกำลังพล</label>
+                  <select
+                    value={targetUserId}
+                    onChange={(e) => setTargetUserId(e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-slate-800"
+                    required
+                  >
+                    {users.map((u: any) => (
+                      <option key={u.id} value={u.id}>
+                        {u.rank} {u.firstName} {u.lastName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <label className="text-slate-600 block mb-1 font-medium">ผู้ขอยื่นลา</label>
+                  <input
+                    disabled
+                    value={`${currentUser.rank || ""} ${currentUser.firstName || ""} ${currentUser.lastName || ""}`}
+                    className="w-full border border-slate-200 bg-slate-100 rounded-lg p-2.5 text-slate-600 cursor-not-allowed"
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="text-slate-600 block mb-1 font-medium">ประเภทการลา</label>
                 <select
@@ -522,6 +687,7 @@ function LightCalendarView({ leaves, duties, users, onRefresh }: any) {
                   <option value="OTHER">อื่นๆ</option>
                 </select>
               </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-slate-600 block mb-1 font-medium">เริ่ม</label>
@@ -544,6 +710,7 @@ function LightCalendarView({ leaves, duties, users, onRefresh }: any) {
                   />
                 </div>
               </div>
+
               <div>
                 <label className="text-slate-600 block mb-1 font-medium">เหตุผลความจำเป็น</label>
                 <textarea
@@ -554,19 +721,17 @@ function LightCalendarView({ leaves, duties, users, onRefresh }: any) {
                   placeholder="ระบุเหตุผลประกอบการลา..."
                 />
               </div>
+
               <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsApplyModalOpen(false)}
+                  onClick={() => setIsModalOpen(false)}
                   className="px-4 py-2 border border-slate-300 rounded-lg text-slate-600"
                 >
                   ยกเลิก
                 </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow"
-                >
-                  บันทึก
+                <button type="submit" className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg shadow">
+                  {isAdmin ? "บันทึกข้อมูล" : "ส่งคำขอลา"}
                 </button>
               </div>
             </form>
@@ -578,9 +743,9 @@ function LightCalendarView({ leaves, duties, users, onRefresh }: any) {
 }
 
 // ------------------------------------------------------------------------------------------------
-// Tab 2: ไปราชการประจำกอง
+// หน้าที่ 2: ไปราชการประจำของกอง (สฝอว.สม. / สฝอว.ดน. / ราชการอื่นๆ)
 // ------------------------------------------------------------------------------------------------
-function LightDeploymentView({ missions, users, onRefresh }: any) {
+function Tab2Deployment({ missions, users, isAdmin, onRefresh }: any) {
   const [filterLoc, setFilterLoc] = useState("ALL");
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -589,9 +754,10 @@ function LightDeploymentView({ missions, users, onRefresh }: any) {
   const [year, setYear] = useState("2569");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [otherDetail, setOtherDetail] = useState("");
   const [selectedStaffs, setSelectedStaffs] = useState<string[]>([]);
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const handleCreateMission = async (e: React.FormEvent) => {
     e.preventDefault();
     await fetch("/api/missions", {
       method: "POST",
@@ -602,6 +768,7 @@ function LightDeploymentView({ missions, users, onRefresh }: any) {
         year: parseInt(year, 10),
         startDate,
         endDate,
+        otherDetail,
         staffIds: selectedStaffs,
       }),
     });
@@ -609,7 +776,7 @@ function LightDeploymentView({ missions, users, onRefresh }: any) {
     onRefresh();
   };
 
-  const filtered = missions.filter((m: any) => filterLoc === "ALL" || m.location === filterLoc);
+  const filteredMissions = missions.filter((m: any) => filterLoc === "ALL" || m.location === filterLoc);
 
   return (
     <div className="space-y-6">
@@ -617,7 +784,7 @@ function LightDeploymentView({ missions, users, onRefresh }: any) {
         <div>
           <h2 className="text-lg font-bold text-slate-900">หน้า 2: ทะเบียนไปราชการประจำกอง</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            สฝอว.สม., สฝอว.ดน. และราชการอื่นๆ ประจำปี พ.ศ. 2569
+            สฝอว.สม., สฝอว.ดน. และราชการอื่นๆ ประจำปี พ.ศ.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -632,35 +799,40 @@ function LightDeploymentView({ missions, users, onRefresh }: any) {
                     : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                 }`}
               >
-                {loc === "ALL" ? "ทั้งหมด" : loc === "SAM_MO" ? "สฝอว.สม." : loc === "DON_MUEANG" ? "สฝอว.ดน." : "ราชการอื่น"}
+                {loc === "ALL" ? "ทั้งหมด" : loc === "SAM_MO" ? "1. สฝอว.สม." : loc === "DON_MUEANG" ? "2. สฝอว.ดน." : "3. ราชการอื่นๆ"}
               </button>
             ))}
           </div>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1 shadow-sm"
-          >
-            <Plus className="w-3.5 h-3.5" /> เพิ่มผลัด
-          </button>
+
+          {isAdmin && (
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1 shadow-sm"
+            >
+              <Plus className="w-3.5 h-3.5" /> สร้างผลัดราชการ
+            </button>
+          )}
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {filtered.map((m: any) => (
+        {filteredMissions.map((m: any) => (
           <div key={m.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
             <div className="flex justify-between items-start">
               <span className="px-2.5 py-1 text-xs font-bold font-mono bg-blue-50 text-blue-700 border border-blue-200 rounded-lg">
                 ผลัดที่ {m.batchNumber} / {m.year}
               </span>
               <span className="text-xs font-semibold text-slate-500">
-                {m.location === "SAM_MO" ? "สฝอว.สม." : m.location === "DON_MUEANG" ? "สฝอว.ดน." : "ราชการอื่น"}
+                {m.location === "SAM_MO" ? "ราชการ สฝอว.สม." : m.location === "DON_MUEANG" ? "ราชการ สฝอว.ดน." : `ราชการอื่นๆ (${m.otherDetail || "-"})`}
               </span>
             </div>
             <div className="text-xs text-slate-600 font-mono">
               {new Date(m.startDate).toLocaleDateString("th-TH")} - {new Date(m.endDate).toLocaleDateString("th-TH")}
             </div>
             <div className="pt-2 border-t border-slate-100 space-y-1 text-xs">
-              <span className="text-[10px] text-slate-400 font-medium uppercase">กำลังพลประจำผลัด:</span>
+              <span className="text-[10px] text-slate-400 font-medium uppercase">
+                รายชื่อกำลังพล ({m.staffs?.length || 0} นาย):
+              </span>
               <div className="flex flex-wrap gap-1">
                 {m.staffs?.map((s: any) => (
                   <span key={s.id} className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[11px]">
@@ -680,19 +852,33 @@ function LightDeploymentView({ missions, users, onRefresh }: any) {
               <h3 className="text-base font-bold text-slate-900">สร้างผลัดการไปราชการ</h3>
               <button onClick={() => setIsModalOpen(false)}><X className="w-4 h-4 text-slate-400" /></button>
             </div>
-            <form onSubmit={handleCreate} className="space-y-3 text-xs">
+            <form onSubmit={handleCreateMission} className="space-y-3 text-xs">
               <div>
-                <label className="text-slate-600 block mb-1">สถานที่ราชการ</label>
+                <label className="text-slate-600 block mb-1">หมวดหมู่ราชการ</label>
                 <select
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                   className="w-full border rounded-lg p-2 text-slate-800"
                 >
-                  <option value="SAM_MO">1. สฝอว.สม.</option>
-                  <option value="DON_MUEANG">2. สฝอว.ดน.</option>
+                  <option value="SAM_MO">1. ราชการ สฝอว.สม.</option>
+                  <option value="DON_MUEANG">2. ราชการ สฝอว.ดน.</option>
                   <option value="OTHER">3. ราชการอื่นๆ</option>
                 </select>
               </div>
+
+              {location === "OTHER" && (
+                <div>
+                  <label className="text-slate-600 block mb-1">ระบุรายละเอียดราชการอื่นๆ</label>
+                  <input
+                    placeholder="เช่น ปฏิบัติราชการฝึกร่วม..."
+                    value={otherDetail}
+                    onChange={(e) => setOtherDetail(e.target.value)}
+                    className="w-full border rounded-lg p-2 text-slate-800"
+                    required
+                  />
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-slate-600 block mb-1">ผลัดที่</label>
@@ -715,6 +901,7 @@ function LightDeploymentView({ missions, users, onRefresh }: any) {
                   />
                 </div>
               </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-slate-600 block mb-1">เริ่ม</label>
@@ -737,8 +924,9 @@ function LightDeploymentView({ missions, users, onRefresh }: any) {
                   />
                 </div>
               </div>
+
               <div>
-                <label className="text-slate-600 block mb-1">เลือกกำลังพล</label>
+                <label className="text-slate-600 block mb-1">เลือกกำลังพลในผลัด</label>
                 <div className="max-h-32 overflow-y-auto border rounded-lg p-2 space-y-1">
                   {users.map((u: any) => (
                     <label key={u.id} className="flex items-center gap-2 cursor-pointer text-slate-700">
@@ -755,6 +943,7 @@ function LightDeploymentView({ missions, users, onRefresh }: any) {
                   ))}
                 </div>
               </div>
+
               <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
@@ -776,9 +965,9 @@ function LightDeploymentView({ missions, users, onRefresh }: any) {
 }
 
 // ------------------------------------------------------------------------------------------------
-// Tab 3: จัดสรรเวรอัตโนมัติ
+// หน้าที่ 3: ระบบจัดผลัดและเวรอัตโนมัติ (Fair-Share Dispatcher)
 // ------------------------------------------------------------------------------------------------
-function LightDispatcherView({ dutyTypes, schedules, onRefresh }: any) {
+function Tab3Dispatcher({ dutyTypes, schedules, isAdmin, onRefresh }: any) {
   const [selectedType, setSelectedType] = useState("");
   const [targetDate, setTargetDate] = useState("");
   const [loading, setLoading] = useState(false);
@@ -799,7 +988,7 @@ function LightDispatcherView({ dutyTypes, schedules, onRefresh }: any) {
     });
     setLoading(false);
     if (res.ok) {
-      alert("จัดสรรเวรอัตโนมัติสำเร็จ");
+      alert("จัดเวรอัตโนมัติสำเร็จ (คำนวณตามสถิติน้อยสุดและไม่ติดภารกิจ)");
       onRefresh();
     } else {
       const err = await res.json();
@@ -828,49 +1017,64 @@ function LightDispatcherView({ dutyTypes, schedules, onRefresh }: any) {
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       <div className="lg:col-span-5 bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
         <div className="flex justify-between items-center">
-          <h2 className="text-sm font-bold text-slate-900">แผงควบคุมการคำนวณเวร</h2>
-          <button
-            onClick={() => setIsTypeModalOpen(true)}
-            className="text-xs text-blue-600 hover:underline font-semibold"
-          >
-            + เพิ่มประเภทเวร
-          </button>
-        </div>
-        <form onSubmit={handleDispatch} className="space-y-3 text-xs">
-          <div>
-            <label className="text-slate-600 block mb-1">เลือกประเภทเวร</label>
-            <select
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value)}
-              className="w-full border border-slate-300 rounded-lg p-2.5 text-slate-800"
-              required
+          <h2 className="text-sm font-bold text-slate-900">แผงควบคุมการจัดเวรอัตโนมัติ</h2>
+          {isAdmin && (
+            <button
+              onClick={() => setIsTypeModalOpen(true)}
+              className="text-xs text-blue-600 hover:underline font-semibold"
             >
-              <option value="">-- เลือกประเภทเวร --</option>
-              {dutyTypes.map((t: any) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} (จริง {t.mainCount} / สำรอง {t.backupCount})
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-slate-600 block mb-1">ระบุวันที่</label>
-            <input
-              type="date"
-              value={targetDate}
-              onChange={(e) => setTargetDate(e.target.value)}
-              className="w-full border border-slate-300 rounded-lg p-2 text-slate-800"
-              required
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 font-semibold text-white rounded-xl shadow transition"
-          >
-            {loading ? "กำลังคำนวณ..." : "⚡ จัดสรรเวรอัตโนมัติ"}
-          </button>
-        </form>
+              + เพิ่มประเภทเวร
+            </button>
+          )}
+        </div>
+
+        {isAdmin ? (
+          <form onSubmit={handleDispatch} className="space-y-3 text-xs">
+            <div>
+              <label className="text-slate-600 block mb-1">เลือกประเภทเวร</label>
+              <select
+                value={selectedType}
+                onChange={(e) => setSelectedType(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg p-2.5 text-slate-800"
+                required
+              >
+                <option value="">-- เลือกประเภทเวร --</option>
+                {dutyTypes.map((t: any) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} (
+                    {t.requiredType === "COMMISSIONED"
+                      ? "สัญญาบัตร"
+                      : t.requiredType === "NON_COMMISSIONED"
+                      ? "ประทวน"
+                      : "ทั้งหมด"}{" "}
+                    • จริง {t.mainCount} / สำรอง {t.backupCount})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-slate-600 block mb-1">ระบุวันที่ต้องการจัด</label>
+              <input
+                type="date"
+                value={targetDate}
+                onChange={(e) => setTargetDate(e.target.value)}
+                className="w-full border border-slate-300 rounded-lg p-2 text-slate-800"
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 font-semibold text-white rounded-xl shadow transition"
+            >
+              {loading ? "กำลังคำนวณตามสถิติ..." : "⚡ จัดสรรเวรอัตโนมัติ"}
+            </button>
+          </form>
+        ) : (
+          <p className="text-xs text-slate-500">ฟังก์ชันนี้สงวนไว้สำหรับผู้ดูแลระบบ</p>
+        )}
       </div>
 
       <div className="lg:col-span-7 bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-3">
@@ -880,7 +1084,7 @@ function LightDispatcherView({ dutyTypes, schedules, onRefresh }: any) {
             <div key={s.id} className="p-3.5 border border-slate-200 rounded-xl space-y-2 text-xs">
               <div className="flex justify-between items-center">
                 <span className="font-bold text-blue-700">{s.dutyType.name}</span>
-                <span className="font-mono text-slate-500">{new Date(s.dutyDate).toLocaleDateString("th-TH")}</span>
+                <span className="font-mono text-slate-500">{new Date(s.dutyDate).toLocaleDateString("th-TH")} (พ.ศ. {s.year})</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {s.staffs.map((st: any) => (
@@ -890,7 +1094,7 @@ function LightDispatcherView({ dutyTypes, schedules, onRefresh }: any) {
                       st.isBackup ? "bg-amber-50 text-amber-800 border border-amber-200" : "bg-blue-50 text-blue-800 border border-blue-200"
                     }`}
                   >
-                    {st.isBackup ? "[สำรอง]" : "[ตัวจริง]"} {st.user.rank} {st.user.firstName}
+                    {st.isBackup ? "[ตัวสำรอง]" : "[ตัวจริง]"} {st.user.rank} {st.user.firstName} {st.user.lastName}
                   </span>
                 ))}
               </div>
@@ -903,7 +1107,7 @@ function LightDispatcherView({ dutyTypes, schedules, onRefresh }: any) {
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-2xl">
             <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-base font-bold text-slate-900">สร้างประเภทเวรใหม่</h3>
+              <h3 className="text-base font-bold text-slate-900">สร้างประเภทเวร / ภารกิจใหม่</h3>
               <button onClick={() => setIsTypeModalOpen(false)}><X className="w-4 h-4 text-slate-400" /></button>
             </div>
             <form onSubmit={handleCreateType} className="space-y-3 text-xs">
@@ -911,13 +1115,14 @@ function LightDispatcherView({ dutyTypes, schedules, onRefresh }: any) {
                 <label className="text-slate-600 block mb-1">ชื่อเวร</label>
                 <input
                   type="text"
-                  placeholder="เช่น เวรนำแถว, เวรบรรยายสรุป"
+                  placeholder="เช่น เวรนำแถว, เวรบรรยายสรุป, เวรพูดหน้าแถว"
                   value={typeName}
                   onChange={(e) => setTypeName(e.target.value)}
                   className="w-full border rounded-lg p-2 text-slate-800"
                   required
                 />
               </div>
+
               <div>
                 <label className="text-slate-600 block mb-1">คุณสมบัติชั้นยศ</label>
                 <select
@@ -926,10 +1131,11 @@ function LightDispatcherView({ dutyTypes, schedules, onRefresh }: any) {
                   className="w-full border rounded-lg p-2 text-slate-800"
                 >
                   <option value="">ทั้งหมด (ใครก็ได้)</option>
-                  <option value="COMMISSIONED">เฉพาะสัญญาบัตร</option>
-                  <option value="NON_COMMISSIONED">เฉพาะประทวน</option>
+                  <option value="COMMISSIONED">เฉพาะนายทหารสัญญาบัตร</option>
+                  <option value="NON_COMMISSIONED">เฉพาะนายทหารประทวน</option>
                 </select>
               </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-slate-600 block mb-1">ตัวจริง (นาย)</label>
@@ -952,6 +1158,7 @@ function LightDispatcherView({ dutyTypes, schedules, onRefresh }: any) {
                   />
                 </div>
               </div>
+
               <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
@@ -961,7 +1168,7 @@ function LightDispatcherView({ dutyTypes, schedules, onRefresh }: any) {
                   ยกเลิก
                 </button>
                 <button type="submit" className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg">
-                  สร้างประเภทเวร
+                  บันทึกประเภทเวร
                 </button>
               </div>
             </form>
@@ -973,10 +1180,12 @@ function LightDispatcherView({ dutyTypes, schedules, onRefresh }: any) {
 }
 
 // ------------------------------------------------------------------------------------------------
-// Tab 4: สถิติกำลังพล & Export
+// หน้าที่ 4: ศูนย์รวมสถิติการลา ราชการ และการเข้าเวรสะสม
 // ------------------------------------------------------------------------------------------------
-function LightAnalyticsView({ users, missions, leaves, schedules }: any) {
+function Tab4Analytics({ users, missions, leaves, schedules }: any) {
+  const [selectedYear, setSelectedYear] = useState<number>(2569);
   const [search, setSearch] = useState("");
+
   const filtered = users.filter((u: any) =>
     `${u.rank} ${u.firstName} ${u.lastName}`.toLowerCase().includes(search.toLowerCase())
   );
@@ -985,17 +1194,32 @@ function LightAnalyticsView({ users, missions, leaves, schedules }: any) {
     <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
         <div>
-          <h2 className="text-base font-bold text-slate-900">ศูนย์รวมสถิติกำลังพลประจำปี 2569</h2>
-          <p className="text-xs text-slate-500">รายงานสรุปวันลา ราชการสนาม และการปฏิบัติหน้าที่เวร</p>
+          <h2 className="text-base font-bold text-slate-900">ศูนย์รวมสถิติกำลังพลประจำปี</h2>
+          <p className="text-xs text-slate-500">ข้อมูลสถิติผลัดราชการ วันลา และการจัดเวรย้อนหลังไม่สูญหาย</p>
         </div>
-        <div className="flex gap-2">
+
+        <div className="flex gap-2 items-center">
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="text-slate-500">เลือกปี:</span>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
+              className="border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-700"
+            >
+              {[2568, 2569, 2570].map((y) => (
+                <option key={y} value={y}>พ.ศ. {y}</option>
+              ))}
+            </select>
+          </div>
+
           <input
             type="text"
             placeholder="ค้นหาชื่อกำลังพล..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="border border-slate-300 rounded-xl px-3 py-1.5 text-xs"
+            className="border border-slate-300 rounded-xl px-3 py-1 text-xs"
           />
+
           <button
             onClick={() => window.print()}
             className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow"
@@ -1012,31 +1236,55 @@ function LightAnalyticsView({ users, missions, leaves, schedules }: any) {
               <th className="p-3">ลำดับ</th>
               <th className="p-3">ยศ - ชื่อ สกุล</th>
               <th className="p-3">ชั้นยศ</th>
-              <th className="p-3 text-center">สฝอว.สม.</th>
-              <th className="p-3 text-center">สฝอว.ดน.</th>
+              <th className="p-3 text-center">สฝอว.สม. ({selectedYear})</th>
+              <th className="p-3 text-center">สฝอว.ดน. ({selectedYear})</th>
+              <th className="p-3 text-center">ราชการอื่น ({selectedYear})</th>
               <th className="p-3 text-center">ลาพักผ่อน</th>
               <th className="p-3 text-center">ลาป่วย</th>
-              <th className="p-3 text-center">เข้าเวรรวม</th>
+              <th className="p-3 text-center">ลากิจ</th>
+              <th className="p-3 text-center">เข้าเวรปี {selectedYear}</th>
+              <th className="p-3 text-center">เข้าเวรสะสมทั้งหมด</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filtered.map((u: any, idx: number) => {
-              const depSM = missions.filter((m: any) => m.location === "SAM_MO" && m.staffs?.some((s: any) => s.userId === u.id)).length;
-              const depDN = missions.filter((m: any) => m.location === "DON_MUEANG" && m.staffs?.some((s: any) => s.userId === u.id)).length;
-              const leaveVac = leaves.filter((l: any) => l.userId === u.id && l.leaveType === "VACATION").length;
-              const leaveSick = leaves.filter((l: any) => l.userId === u.id && l.leaveType === "SICK").length;
-              const dutyCount = schedules.reduce((acc: number, cur: any) => acc + (cur.staffs?.filter((st: any) => st.userId === u.id).length || 0), 0);
+              // นับผลัดราชการตามปีที่เลือก
+              const depSM = missions.filter(
+                (m: any) => m.location === "SAM_MO" && m.year === selectedYear && m.staffs?.some((s: any) => s.userId === u.id)
+              ).length;
+              const depDN = missions.filter(
+                (m: any) => m.location === "DON_MUEANG" && m.year === selectedYear && m.staffs?.some((s: any) => s.userId === u.id)
+              ).length;
+              const depOther = missions.filter(
+                (m: any) => m.location === "OTHER" && m.year === selectedYear && m.staffs?.some((s: any) => s.userId === u.id)
+              ).length;
+
+              // สถิติวันลา
+              const leaveVac = leaves.filter((l: any) => l.userId === u.id && l.leaveType === "VACATION" && l.isApproved).length;
+              const leaveSick = leaves.filter((l: any) => l.userId === u.id && l.leaveType === "SICK" && l.isApproved).length;
+              const leaveBus = leaves.filter((l: any) => l.userId === u.id && l.leaveType === "BUSINESS" && l.isApproved).length;
+
+              // สถิติการเข้าเวรปีนี้ และสะสมทั้งหมด
+              const dutyThisYear = schedules.filter((sc: any) => sc.year === selectedYear).reduce(
+                (acc: number, cur: any) => acc + (cur.staffs?.filter((st: any) => st.userId === u.id).length || 0), 0
+              );
+              const dutyTotal = schedules.reduce(
+                (acc: number, cur: any) => acc + (cur.staffs?.filter((st: any) => st.userId === u.id).length || 0), 0
+              );
 
               return (
                 <tr key={u.id} className="hover:bg-slate-50/60">
                   <td className="p-3 font-mono text-slate-400">{idx + 1}</td>
                   <td className="p-3 font-semibold text-slate-800">{u.rank} {u.firstName} {u.lastName}</td>
                   <td className="p-3 text-slate-500">{u.category === "COMMISSIONED" ? "สัญญาบัตร" : "ประทวน"}</td>
-                  <td className="p-3 text-center font-mono">{depSM}</td>
-                  <td className="p-3 text-center font-mono">{depDN}</td>
+                  <td className="p-3 text-center font-mono text-blue-600 font-medium">{depSM}</td>
+                  <td className="p-3 text-center font-mono text-indigo-600 font-medium">{depDN}</td>
+                  <td className="p-3 text-center font-mono text-slate-500 font-medium">{depOther}</td>
                   <td className="p-3 text-center font-mono text-amber-600">{leaveVac}</td>
                   <td className="p-3 text-center font-mono text-rose-600">{leaveSick}</td>
-                  <td className="p-3 text-center font-mono font-bold text-blue-600">{dutyCount}</td>
+                  <td className="p-3 text-center font-mono text-slate-600">{leaveBus}</td>
+                  <td className="p-3 text-center font-mono font-bold text-blue-600">{dutyThisYear}</td>
+                  <td className="p-3 text-center font-mono font-bold text-emerald-600">{dutyTotal}</td>
                 </tr>
               );
             })}
@@ -1048,160 +1296,157 @@ function LightAnalyticsView({ users, missions, leaves, schedules }: any) {
 }
 
 // ------------------------------------------------------------------------------------------------
-// Tab 5: ทำเนียบกำลังพล (เพิ่ม/จัดการข้อมูลกำลังพลในกอง)
+// เมนูกำลังพล & อนุมัติผู้ใช้งาน (สำหรับ Admin และ Super Admin)
 // ------------------------------------------------------------------------------------------------
-function LightPersonnelView({ users, onRefresh }: any) {
-  const [isAddOpen, setIsAddOpen] = useState(false);
+function TabAdminUsers({ users, isSuperAdmin, onRefresh }: any) {
+  const [editId, setEditId] = useState<string | null>(null);
   const [rank, setRank] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [category, setCategory] = useState("NON_COMMISSIONED");
 
-  const handleAdd = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const res = await fetch("/api/users", {
-      method: "POST",
+  const handleApprove = async (id: string) => {
+    if (!rank || !firstName || !lastName) {
+      return alert("กรุณาระบุ ยศ ชื่อ และนามสกุลจริงก่อนอนุมัติ");
+    }
+    await fetch(`/api/users/${id}/approve`, {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ rank, firstName, lastName, category }),
     });
-    if (res.ok) {
-      alert("เพิ่มกำลังพลสำเร็จ");
-      setIsAddOpen(false);
-      setFirstName("");
-      setLastName("");
-      onRefresh();
-    }
+    setEditId(null);
+    onRefresh();
+  };
+
+  const handleChangeRole = async (id: string, role: string) => {
+    await fetch(`/api/users/${id}/role`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    });
+    onRefresh();
   };
 
   return (
     <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
-      <div className="flex justify-between items-center border-b border-slate-100 pb-4">
-        <div>
-          <h2 className="text-base font-bold text-slate-900">ทำเนียบกำลังพล กองเฝ้าระวังทางอวกาศ</h2>
-          <p className="text-xs text-slate-500">รายชื่อกำลังพลทั้งหมดในฐานข้อมูลสำหรับจัดผลัดและเวร</p>
-        </div>
-        <button
-          onClick={() => setIsAddOpen(true)}
-          className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1 shadow-sm"
-        >
-          <Plus className="w-3.5 h-3.5" /> เพิ่มกำลังพล
-        </button>
+      <div>
+        <h2 className="text-base font-bold text-slate-900">จัดการกำลังพล & อนุมัติสิทธิ์เข้าใช้งาน</h2>
+        <p className="text-xs text-slate-500">
+          ผู้ใช้งานที่ล็อกอินผ่าน Google จะต้องได้รับการกรอก ยศ-ชื่อจริง และอนุมัติสถานะก่อนจึงจะเข้าใช้งานได้
+        </p>
       </div>
 
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs">
           <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200">
             <tr>
-              <th className="p-3">ลำดับ</th>
-              <th className="p-3">ยศ - ชื่อ สกุล</th>
-              <th className="p-3">ประเภทชั้นยศ</th>
+              <th className="p-3">อีเมล Google</th>
+              <th className="p-3">ยศ - ชื่อ สกุลจริง</th>
+              <th className="p-3">ชั้นยศ</th>
+              <th className="p-3">สิทธิ์</th>
               <th className="p-3">สถานะ</th>
+              <th className="p-3 text-center">จัดการ</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {users.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="text-center py-8 text-slate-400">
-                  ยังไม่มีรายชื่อกำลังพล กดปุ่ม "+ เพิ่มกำลังพล" ด้านบนเพื่อเริ่มต้น
+            {users.map((u: any) => (
+              <tr key={u.id}>
+                <td className="p-3 font-mono text-slate-500">{u.email}</td>
+                <td className="p-3 font-semibold text-slate-800">
+                  {editId === u.id ? (
+                    <div className="flex gap-1">
+                      <input
+                        placeholder="ยศ"
+                        value={rank}
+                        onChange={(e) => setRank(e.target.value)}
+                        className="w-16 border rounded p-1 text-slate-800"
+                      />
+                      <input
+                        placeholder="ชื่อจริง"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        className="w-24 border rounded p-1 text-slate-800"
+                      />
+                      <input
+                        placeholder="นามสกุล"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        className="w-24 border rounded p-1 text-slate-800"
+                      />
+                    </div>
+                  ) : (
+                    `${u.rank || "-"} ${u.firstName || "-"} ${u.lastName || ""}`
+                  )}
+                </td>
+                <td className="p-3">
+                  {editId === u.id ? (
+                    <select
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                      className="border rounded p-1"
+                    >
+                      <option value="NON_COMMISSIONED">ประทวน</option>
+                      <option value="COMMISSIONED">สัญญาบัตร</option>
+                    </select>
+                  ) : u.category === "COMMISSIONED" ? (
+                    "สัญญาบัตร"
+                  ) : (
+                    "ประทวน"
+                  )}
+                </td>
+                <td className="p-3">
+                  {isSuperAdmin && u.role !== "SUPER_ADMIN" ? (
+                    <select
+                      value={u.role}
+                      onChange={(e) => handleChangeRole(u.id, e.target.value)}
+                      className="border rounded px-2 py-0.5 text-xs font-semibold"
+                    >
+                      <option value="USER">USER</option>
+                      <option value="ADMIN">ADMIN</option>
+                    </select>
+                  ) : (
+                    <span className="font-mono font-bold text-blue-700">{u.role}</span>
+                  )}
+                </td>
+                <td className="p-3">
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      u.status === "ACTIVE"
+                        ? "bg-emerald-100 text-emerald-800"
+                        : "bg-amber-100 text-amber-800"
+                    }`}
+                  >
+                    {u.status}
+                  </span>
+                </td>
+                <td className="p-3 text-center">
+                  {editId === u.id ? (
+                    <button
+                      onClick={() => handleApprove(u.id)}
+                      className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-medium"
+                    >
+                      บันทึก & อนุมัติ
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setEditId(u.id);
+                        setRank(u.rank || "");
+                        setFirstName(u.firstName || "");
+                        setLastName(u.lastName || "");
+                        setCategory(u.category || "NON_COMMISSIONED");
+                      }}
+                      className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-medium"
+                    >
+                      แก้ไข/อนุมัติ
+                    </button>
+                  )}
                 </td>
               </tr>
-            ) : (
-              users.map((u: any, idx: number) => (
-                <tr key={u.id} className="hover:bg-slate-50/60">
-                  <td className="p-3 font-mono text-slate-400">{idx + 1}</td>
-                  <td className="p-3 font-semibold text-slate-800">
-                    {u.rank} {u.firstName} {u.lastName}
-                  </td>
-                  <td className="p-3">
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-mono border ${
-                        u.category === "COMMISSIONED"
-                          ? "bg-purple-50 text-purple-700 border-purple-200"
-                          : "bg-blue-50 text-blue-700 border-blue-200"
-                      }`}
-                    >
-                      {u.category === "COMMISSIONED" ? "สัญญาบัตร" : "ประทวน"}
-                    </span>
-                  </td>
-                  <td className="p-3">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      พร้อมปฏิบัติการ
-                    </span>
-                  </td>
-                </tr>
-              ))
-            )}
+            ))}
           </tbody>
         </table>
       </div>
-
-      {isAddOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-base font-bold text-slate-900">เพิ่มรายชื่อกำลังพล</h3>
-              <button onClick={() => setIsAddOpen(false)}><X className="w-4 h-4 text-slate-400" /></button>
-            </div>
-            <form onSubmit={handleAdd} className="space-y-3 text-xs">
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="text-slate-600 block mb-1">ยศ</label>
-                  <input
-                    placeholder="เช่น จ.อ., น.ต."
-                    value={rank}
-                    onChange={(e) => setRank(e.target.value)}
-                    className="w-full border rounded-lg p-2"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-slate-600 block mb-1">ชื่อ</label>
-                  <input
-                    placeholder="ชื่อจริง"
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    className="w-full border rounded-lg p-2"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-slate-600 block mb-1">นามสกุล</label>
-                  <input
-                    placeholder="นามสกุล"
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    className="w-full border rounded-lg p-2"
-                    required
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-slate-600 block mb-1">ประเภทชั้นยศ</label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full border rounded-lg p-2 text-slate-800"
-                >
-                  <option value="NON_COMMISSIONED">นายทหารประทวน</option>
-                  <option value="COMMISSIONED">นายทหารสัญญาบัตร</option>
-                </select>
-              </div>
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAddOpen(false)}
-                  className="px-4 py-2 border rounded-lg text-slate-600"
-                >
-                  ยกเลิก
-                </button>
-                <button type="submit" className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg">
-                  บันทึกกำลังพล
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

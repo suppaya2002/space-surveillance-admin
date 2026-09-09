@@ -8,42 +8,42 @@ generator client {
 }
 
 enum Role {
-  SUPER_ADMIN
-  ADMIN
-  USER
+  SUPER_ADMIN // แอดมินสูงสุดคนเดียว กำหนดสิทธิ์ Admin ได้
+  ADMIN       // จัดการเวร อนุมัติการลา ลงผลัดราชการ
+  USER        // กำลังพลทั่วไป ขอลาของตัวเองได้เท่านั้น
 }
 
 enum UserStatus {
-  PENDING
-  ACTIVE
+  PENDING     // เพิ่งล็อกอินผ่าน Google รอแอดมินกรอกชื่อ-สกุล และอนุมัติ
+  ACTIVE      // ได้รับการอนุมัติแล้ว เข้าใช้งานได้ปกติ
 }
 
 enum OfficerCategory {
-  COMMISSIONED     // สัญญาบัตร
-  NON_COMMISSIONED // ประทวน
+  COMMISSIONED     // นายทหารสัญญาบัตร
+  NON_COMMISSIONED // นายทหารประทวน
 }
 
 enum LeaveType {
   VACATION // ลาพักผ่อน
-  BUSINESS // ลากิจ
+  BUSINESS // ลากิจส่วนตัว
   SICK     // ลาป่วย
   OTHER    // อื่นๆ
 }
 
 enum MissionLocation {
-  SAM_MO      // สฝอว.สม.
-  DON_MUEANG  // สฝอว.ดน.
+  SAM_MO      // ราชการ สฝอว.สม.
+  DON_MUEANG  // ราชการ สฝอว.ดน.
   OTHER       // ราชการอื่นๆ
 }
 
 model User {
   id           String           @id @default(cuid())
   email        String           @unique
-  name         String?          // Google display name
-  rank         String?          // ยศ เช่น จ.อ., น.ต.
+  name         String?          // ชื่อจาก Google Profile
+  rank         String?          // ยศ (เช่น จ.อ., น.ต.)
   firstName    String?          // ชื่อจริง
   lastName     String?          // นามสกุลจริง
-  category     OfficerCategory?
+  category     OfficerCategory? // สัญญาบัตร / ประทวน
   role         Role             @default(USER)
   status       UserStatus       @default(PENDING)
   createdAt    DateTime         @default(now())
@@ -68,10 +68,10 @@ model LeaveRecord {
 
 model MissionBatch {
   id          String          @id @default(cuid())
-  batchNumber Int
+  batchNumber Int             // ลำดับผลัด เช่น ผลัดที่ 1
   year        Int             // ปี พ.ศ. เช่น 2569
-  location    MissionLocation
-  otherDetail String?
+  location    MissionLocation // สฝอว.สม. / สฝอว.ดน. / ราชการอื่นๆ
+  otherDetail String?         // รายละเอียดหากเป็นราชการอื่นๆ
   startDate   DateTime
   endDate     DateTime
   createdAt   DateTime        @default(now())
@@ -89,9 +89,9 @@ model MissionStaff {
 model DutyType {
   id           String           @id @default(cuid())
   name         String           // เช่น เวรนำแถว, เวรบรรยายสรุป, เวรพูดหน้าแถว
-  requiredType OfficerCategory? // สัญญาบัตร / ประทวน หรือ null หากเป็นใครก็ได้
-  mainCount    Int              @default(1)
-  backupCount  Int              @default(1)
+  requiredType OfficerCategory? // ระบุ สัญญาบัตร / ประทวน หรือ null หากเป็นใครก็ได้
+  mainCount    Int              @default(1) // จำนวนตัวจริง
+  backupCount  Int              @default(1) // จำนวนตัวสำรอง
   schedules    DutySchedule[]
 }
 
@@ -100,6 +100,7 @@ model DutySchedule {
   dutyTypeId String
   dutyType   DutyType    @relation(fields: [dutyTypeId], references: [id], onDelete: Cascade)
   dutyDate   DateTime
+  year       Int         // ปี พ.ศ. เก็บสถิติย้อนหลัง
   createdAt  DateTime    @default(now())
   staffs     DutyStaff[]
 }
@@ -110,5 +111,5 @@ model DutyStaff {
   schedule   DutySchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
   userId     String
   user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  isBackup   Boolean      @default(false)
+  isBackup   Boolean      @default(false) // true = ตัวสำรอง, false = ตัวจริง
 }

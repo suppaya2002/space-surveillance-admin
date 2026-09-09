@@ -13,7 +13,9 @@ export async function dispatchAutoDuty({ dutyTypeId, targetDate }: DispatchParam
   startOfDay.setHours(0, 0, 0, 0);
   const endOfDay = new Date(targetDate);
   endOfDay.setHours(23, 59, 59, 999);
+  const buddhistYear = targetDate.getFullYear() + 543;
 
+  // 1. ดึงกำลังพลที่ ACTIVE และตรงตามชั้นยศ (สัญญาบัตร/ประทวน)
   const candidateFilter: any = { status: "ACTIVE" };
   if (dutyType.requiredType) {
     candidateFilter.category = dutyType.requiredType;
@@ -40,6 +42,7 @@ export async function dispatchAutoDuty({ dutyTypeId, targetDate }: DispatchParam
     },
   });
 
+  // 2. ตัดคนที่ไม่ว่างออก: ติดลาที่อนุมัติแล้ว หรือติดผลัดราชการในวันนั้น
   const availablePersonnel = candidates.filter((u) => {
     const isLeaving = u.leaves.length > 0;
     const isDeploying = u.missionStaff.some((ms) => {
@@ -53,14 +56,15 @@ export async function dispatchAutoDuty({ dutyTypeId, targetDate }: DispatchParam
   const totalNeeded = dutyType.mainCount + dutyType.backupCount;
   if (availablePersonnel.length < totalNeeded) {
     throw new Error(
-      `กำลังพลไม่เพียงพอสำหรับเข้าเวร (ต้องการ ${totalNeeded} นาย, พร้อมปฏิบัติการ ${availablePersonnel.length} นาย)`
+      `กำลังพลว่างไม่เพียงพอ (ต้องการ ${totalNeeded} นาย, ว่าง ${availablePersonnel.length} นาย)`
     );
   }
 
-  // Fair-share sort: เรียงลำดับคนที่ทำสถิติต่ำสุดขึ้นก่อน
+  // 3. เรียงลำดับ Fair-Share: คนที่เข้าเวรประเภทนี้น้อยที่สุดขึ้นก่อน
   availablePersonnel.sort((a, b) => a.dutyStaff.length - b.dutyStaff.length);
 
   return await prisma.$transaction(async (tx) => {
+    // ล้างเวรเดิมในวันเดียวกันหากมี
     const existing = await tx.dutySchedule.findFirst({
       where: {
         dutyTypeId,
@@ -75,6 +79,7 @@ export async function dispatchAutoDuty({ dutyTypeId, targetDate }: DispatchParam
       data: {
         dutyTypeId,
         dutyDate: startOfDay,
+        year: buddhistYear,
       },
     });
 
@@ -84,15 +89,15 @@ export async function dispatchAutoDuty({ dutyTypeId, targetDate }: DispatchParam
       dutyType.mainCount + dutyType.backupCount
     );
 
-    for (const user of selectedMain) {
+    for (const u of selectedMain) {
       await tx.dutyStaff.create({
-        data: { scheduleId: schedule.id, userId: user.id, isBackup: false },
+        data: { scheduleId: schedule.id, userId: u.id, isBackup: false },
       });
     }
 
-    for (const user of selectedBackup) {
+    for (const u of selectedBackup) {
       await tx.dutyStaff.create({
-        data: { scheduleId: schedule.id, userId: user.id, isBackup: true },
+        data: { scheduleId: schedule.id, userId: u.id, isBackup: true },
       });
     }
 
