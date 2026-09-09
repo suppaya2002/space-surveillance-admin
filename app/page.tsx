@@ -252,7 +252,7 @@ export default function SpaceSurveillanceDashboard() {
           )}
 
           {currentTab === "DEPLOYMENT" && (
-            <Tab2Deployment
+            <Tab2MissionRecords
               missions={missions}
               users={users}
               isAdmin={isAdmin}
@@ -382,10 +382,8 @@ function Tab1Calendar({ leaves, duties, currentUser, isAdmin, users, onRefresh }
             <CalendarIcon className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-900 tracking-tight">หน้า 1: ปฏิทินและคำขอลา</h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              ตรวจสอบสถานะกำลังพลปฏิบัติหน้าที่ การลา และเวรผลัดประจำวัน
-            </p>
+            <h1 className="text-base font-bold text-slate-900">ปฏิทินและคำขอลา</h1>
+            <p className="text-xs text-slate-500">ตรวจสอบสถานะกำลังพลปฏิบัติหน้าที่ การลา และเวรผลัดประจำวัน</p>
           </div>
         </div>
 
@@ -743,217 +741,236 @@ function Tab1Calendar({ leaves, duties, currentUser, isAdmin, users, onRefresh }
 }
 
 // ------------------------------------------------------------------------------------------------
-// หน้าที่ 2: ไปราชการประจำของกอง (สฝอว.สม. / สฝอว.ดน. / ราชการอื่นๆ)
+// หน้าที่ 2: บันทึกราชการประจำกอง (Division Official Records)
 // ------------------------------------------------------------------------------------------------
-function Tab2Deployment({ missions, users, isAdmin, onRefresh }: any) {
-  const [filterLoc, setFilterLoc] = useState("ALL");
+function Tab2MissionRecords({ missions, isAdmin, onRefresh }: any) {
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  const [location, setLocation] = useState("SAM_MO");
-  const [batchNumber, setBatchNumber] = useState("1");
-  const [year, setYear] = useState("2569");
+  const [missionName, setMissionName] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [otherDetail, setOtherDetail] = useState("");
-  const [selectedStaffs, setSelectedStaffs] = useState<string[]>([]);
+  const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+
+  // ดึงรายชื่อกำลังพลทั้งหมดสำหรับเลือกไปปฏิบัติราชการ
+  useEffect(() => {
+    if (isAdmin) {
+      fetch("/api/users")
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data)) setUsers(data);
+        })
+        .catch((err) => console.error("Failed to fetch users", err));
+    }
+  }, [isAdmin]);
 
   const handleCreateMission = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch("/api/missions", {
+    if (!missionName || !startDate || !endDate) {
+      return alert("กรุณากรอกข้อมูลให้ครบถ้วน");
+    }
+
+    const res = await fetch("/api/missions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        location,
-        batchNumber: parseInt(batchNumber, 10),
-        year: parseInt(year, 10),
+        name: missionName,
         startDate,
         endDate,
-        otherDetail,
-        staffIds: selectedStaffs,
+        staffIds: selectedStaffIds,
       }),
     });
-    setIsModalOpen(false);
-    onRefresh();
+
+    if (res.ok) {
+      alert("บันทึกราชการประจำกองสำเร็จ");
+      setIsModalOpen(false);
+      setMissionName("");
+      setStartDate("");
+      setEndDate("");
+      setSelectedStaffIds([]);
+      onRefresh();
+    } else {
+      const err = await res.json();
+      alert(err.error || "เกิดข้อผิดพลาดในการบันทึกราชการ");
+    }
   };
 
-  const filteredMissions = missions.filter((m: any) => filterLoc === "ALL" || m.location === filterLoc);
+  const handleDeleteMission = async (missionId: string) => {
+    if (!confirm("คุณต้องการลบบันทึกราชการนี้ใช่หรือไม่?")) return;
+
+    const res = await fetch(`/api/missions/${missionId}`, {
+      method: "DELETE",
+    });
+
+    if (res.ok) {
+      alert("ลบรายการสำเร็จ");
+      onRefresh();
+    } else {
+      const err = await res.json();
+      alert(err.error || "ไม่สามารถลบรายการได้");
+    }
+  };
+
+  const toggleStaffSelection = (userId: string) => {
+    if (selectedStaffIds.includes(userId)) {
+      setSelectedStaffIds(selectedStaffIds.filter((id) => id !== userId));
+    } else {
+      setSelectedStaffIds([...selectedStaffIds, userId]);
+    }
+  };
 
   return (
     <div className="space-y-6">
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* ส่วนหัวข้อหน้า */}
+      <div className="flex justify-between items-center bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm">
         <div>
-          <h2 className="text-lg font-bold text-slate-900">หน้า 2: ทะเบียนไปราชการประจำกอง</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            สฝอว.สม., สฝอว.ดน. และราชการอื่นๆ ประจำปี พ.ศ.
-          </p>
+           <h1 className="text-base font-bold text-slate-900">บันทึกราชการประจำกอง</h1>
+           <p className="text-xs text-slate-500">สฝอว.สม., สฝอว.ดน. และราชการอื่นๆ ประจำปี พ.ศ. 2569</p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex gap-1.5">
-            {["ALL", "SAM_MO", "DON_MUEANG", "OTHER"].map((loc) => (
-              <button
-                key={loc}
-                onClick={() => setFilterLoc(loc)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-xl border transition ${
-                  filterLoc === loc
-                    ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                }`}
-              >
-                {loc === "ALL" ? "ทั้งหมด" : loc === "SAM_MO" ? "1. สฝอว.สม." : loc === "DON_MUEANG" ? "2. สฝอว.ดน." : "3. ราชการอื่นๆ"}
-              </button>
-            ))}
-          </div>
+        {isAdmin && (
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl shadow transition"
+          >
+            + บันทึกราชการใหม่
+          </button>
+        )}
+      </div>
 
-          {isAdmin && (
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1 shadow-sm"
-            >
-              <Plus className="w-3.5 h-3.5" /> สร้างผลัดราชการ
-            </button>
-          )}
+      {/* ตารางแสดงรายการบันทึกราชการ */}
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
+        <h2 className="text-sm font-bold text-slate-900">รายการไปราชการและปฏิบัติภารกิจ</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-slate-200 text-slate-500">
+                <th className="py-3 px-4 font-semibold">ชื่อภารกิจ / ราชการ</th>
+                <th className="py-3 px-4 font-semibold">ช่วงเวลา</th>
+                <th className="py-3 px-4 font-semibold">กำลังพลที่ปฏิบัติหน้าที่</th>
+                {isAdmin && <th className="py-3 px-4 font-semibold text-right">จัดการ</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {missions && missions.length > 0 ? (
+                missions.map((m: any) => (
+                  <tr key={m.id} className="hover:bg-slate-50/50">
+                    <td className="py-3.5 px-4 font-medium text-slate-800">{m.name}</td>
+                    <td className="py-3.5 px-4 text-slate-600 font-mono">
+                      {new Date(m.startDate).toLocaleDateString("th-TH")} - {new Date(m.endDate).toLocaleDateString("th-TH")}
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <div className="flex flex-wrap gap-1">
+                        {m.staffs && m.staffs.length > 0 ? (
+                          m.staffs.map((st: any) => (
+                            <span key={st.id} className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[11px]">
+                              {st.user.rank} {st.user.firstName} {st.user.lastName}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-slate-400 italic">ไม่มีกำลังพลระบุ</span>
+                        )}
+                      </div>
+                    </td>
+                    {isAdmin && (
+                      <td className="py-3.5 px-4 text-right">
+                        <button
+                          onClick={() => handleDeleteMission(m.id)}
+                          className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded text-xs border border-rose-200 font-medium"
+                        >
+                          ลบ
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={isAdmin ? 4 : 3} className="py-8 text-center text-slate-400">
+                    ยังไม่มีข้อมูลบันทึกราชการประจำกอง
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {filteredMissions.map((m: any) => (
-          <div key={m.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
-            <div className="flex justify-between items-start">
-              <span className="px-2.5 py-1 text-xs font-bold font-mono bg-blue-50 text-blue-700 border border-blue-200 rounded-lg">
-                ผลัดที่ {m.batchNumber} / {m.year}
-              </span>
-              <span className="text-xs font-semibold text-slate-500">
-                {m.location === "SAM_MO" ? "ราชการ สฝอว.สม." : m.location === "DON_MUEANG" ? "ราชการ สฝอว.ดน." : `ราชการอื่นๆ (${m.otherDetail || "-"})`}
-              </span>
-            </div>
-            <div className="text-xs text-slate-600 font-mono">
-              {new Date(m.startDate).toLocaleDateString("th-TH")} - {new Date(m.endDate).toLocaleDateString("th-TH")}
-            </div>
-            <div className="pt-2 border-t border-slate-100 space-y-1 text-xs">
-              <span className="text-[10px] text-slate-400 font-medium uppercase">
-                รายชื่อกำลังพล ({m.staffs?.length || 0} นาย):
-              </span>
-              <div className="flex flex-wrap gap-1">
-                {m.staffs?.map((s: any) => (
-                  <span key={s.id} className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[11px]">
-                    {s.user?.rank} {s.user?.firstName}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
+      {/* Modal สำหรับสร้างบันทึกราชการใหม่ */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-              <h3 className="text-base font-bold text-slate-900">สร้างผลัดการไปราชการ</h3>
-              <button onClick={() => setIsModalOpen(false)}><X className="w-4 h-4 text-slate-400" /></button>
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="text-base font-bold text-slate-900">บันทึกราชการประจำกองใหม่</h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
             </div>
+            
             <form onSubmit={handleCreateMission} className="space-y-3 text-xs">
               <div>
-                <label className="text-slate-600 block mb-1">หมวดหมู่ราชการ</label>
-                <select
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  className="w-full border rounded-lg p-2 text-slate-800"
-                >
-                  <option value="SAM_MO">1. ราชการ สฝอว.สม.</option>
-                  <option value="DON_MUEANG">2. ราชการ สฝอว.ดน.</option>
-                  <option value="OTHER">3. ราชการอื่นๆ</option>
-                </select>
-              </div>
-
-              {location === "OTHER" && (
-                <div>
-                  <label className="text-slate-600 block mb-1">ระบุรายละเอียดราชการอื่นๆ</label>
-                  <input
-                    placeholder="เช่น ปฏิบัติราชการฝึกร่วม..."
-                    value={otherDetail}
-                    onChange={(e) => setOtherDetail(e.target.value)}
-                    className="w-full border rounded-lg p-2 text-slate-800"
-                    required
-                  />
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-slate-600 block mb-1">ผลัดที่</label>
-                  <input
-                    type="number"
-                    value={batchNumber}
-                    onChange={(e) => setBatchNumber(e.target.value)}
-                    className="w-full border rounded-lg p-2 text-slate-800"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-slate-600 block mb-1">ปี พ.ศ.</label>
-                  <input
-                    type="number"
-                    value={year}
-                    onChange={(e) => setYear(e.target.value)}
-                    className="w-full border rounded-lg p-2 text-slate-800"
-                    required
-                  />
-                </div>
+                <label className="text-slate-600 block mb-1 font-medium">ชื่อภารกิจ / ราชการ</label>
+                <input
+                  type="text"
+                  placeholder="เช่น ไปราชการ สฝอว.สม. ณ กองบิน 1"
+                  value={missionName}
+                  onChange={(e) => setMissionName(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-2.5 text-slate-800"
+                  required
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-slate-600 block mb-1">เริ่ม</label>
+                  <label className="text-slate-600 block mb-1 font-medium">ตั้งแต่วันที่</label>
                   <input
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full border rounded-lg p-2 text-slate-800"
+                    className="w-full border border-slate-300 rounded-lg p-2 text-slate-800"
                     required
                   />
                 </div>
                 <div>
-                  <label className="text-slate-600 block mb-1">สิ้นสุด</label>
+                  <label className="text-slate-600 block mb-1 font-medium">ถึงวันที่</label>
                   <input
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full border rounded-lg p-2 text-slate-800"
+                    className="w-full border border-slate-300 rounded-lg p-2 text-slate-800"
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-slate-600 block mb-1">เลือกกำลังพลในผลัด</label>
-                <div className="max-h-32 overflow-y-auto border rounded-lg p-2 space-y-1">
+                <label className="text-slate-600 block mb-1 font-medium">เลือกกำลังพลที่ร่วมปฏิบัติราชการ</label>
+                <div className="border border-slate-200 rounded-xl max-h-48 overflow-y-auto p-2 space-y-1.5 bg-slate-50">
                   {users.map((u: any) => (
-                    <label key={u.id} className="flex items-center gap-2 cursor-pointer text-slate-700">
+                    <label key={u.id} className="flex items-center gap-2 p-1.5 hover:bg-white rounded cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={selectedStaffs.includes(u.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) setSelectedStaffs([...selectedStaffs, u.id]);
-                          else setSelectedStaffs(selectedStaffs.filter((id) => id !== u.id));
-                        }}
+                        checked={selectedStaffIds.includes(u.id)}
+                        onChange={() => toggleStaffSelection(u.id)}
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       />
-                      <span>{u.rank} {u.firstName} {u.lastName}</span>
+                      <span className="text-slate-700 font-medium">
+                        {u.rank} {u.firstName} {u.lastName} <span className="text-slate-400">({u.email})</span>
+                      </span>
                     </label>
                   ))}
                 </div>
               </div>
 
-              <div className="pt-2 flex justify-end gap-2">
+              <div className="pt-3 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border rounded-lg text-slate-600"
+                  className="px-4 py-2 border border-slate-300 rounded-lg text-slate-600 font-medium"
                 >
                   ยกเลิก
                 </button>
-                <button type="submit" className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg">
-                  บันทึก
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg shadow"
+                >
+                  บันทึกข้อมูล
                 </button>
               </div>
             </form>
