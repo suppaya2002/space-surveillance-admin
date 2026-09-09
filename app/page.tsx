@@ -969,7 +969,8 @@ function Tab2Deployment({ missions, users, isAdmin, onRefresh }: any) {
 // ------------------------------------------------------------------------------------------------
 function Tab3Dispatcher({ dutyTypes, schedules, isAdmin, onRefresh }: any) {
   const [selectedType, setSelectedType] = useState("");
-  const [targetDate, setTargetDate] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [loading, setLoading] = useState(false);
 
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
@@ -980,15 +981,19 @@ function Tab3Dispatcher({ dutyTypes, schedules, isAdmin, onRefresh }: any) {
 
   const handleDispatch = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!startDate || !endDate) return alert("กรุณาระบุวันเริ่มต้นและสิ้นสุด");
+    if (new Date(startDate) > new Date(endDate)) return alert("วันสิ้นสุดต้องมากกว่าหรือเท่ากับวันเริ่มต้น");
+
     setLoading(true);
     const res = await fetch("/api/duty/dispatch", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dutyTypeId: selectedType, targetDate }),
+      body: JSON.stringify({ dutyTypeId: selectedType, startDate, endDate }),
     });
     setLoading(false);
+    
     if (res.ok) {
-      alert("จัดเวรอัตโนมัติสำเร็จ (คำนวณตามสถิติน้อยสุดและไม่ติดภารกิจ)");
+      alert("จัดเวรอัตโนมัติตามช่วงเวลาที่กำหนดสำเร็จ (คำนวณตามสถิติน้อยสุดและไม่ติดภารกิจ)");
       onRefresh();
     } else {
       const err = await res.json();
@@ -1053,21 +1058,33 @@ function Tab3Dispatcher({ dutyTypes, schedules, isAdmin, onRefresh }: any) {
               </select>
             </div>
 
-            <div>
-              <label className="text-slate-600 block mb-1">ระบุวันที่ต้องการจัด</label>
-              <input
-                type="date"
-                value={targetDate}
-                onChange={(e) => setTargetDate(e.target.value)}
-                className="w-full border border-slate-300 rounded-lg p-2 text-slate-800"
-                required
-              />
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-slate-600 block mb-1">ตั้งแต่วันที่</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-2 text-slate-800"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-slate-600 block mb-1">ถึงวันที่</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-2 text-slate-800"
+                  required
+                />
+              </div>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 font-semibold text-white rounded-xl shadow transition"
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 font-semibold text-white rounded-xl shadow transition mt-2"
             >
               {loading ? "กำลังคำนวณตามสถิติ..." : "⚡ จัดสรรเวรอัตโนมัติ"}
             </button>
@@ -1079,7 +1096,7 @@ function Tab3Dispatcher({ dutyTypes, schedules, isAdmin, onRefresh }: any) {
 
       <div className="lg:col-span-7 bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-3">
         <h2 className="text-sm font-bold text-slate-900">รายการเวรที่จัดสรรแล้ว</h2>
-        <div className="space-y-2 max-h-96 overflow-y-auto">
+        <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
           {schedules.map((s: any) => (
             <div key={s.id} className="p-3.5 border border-slate-200 rounded-xl space-y-2 text-xs">
               <div className="flex justify-between items-center">
